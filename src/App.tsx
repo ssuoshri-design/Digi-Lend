@@ -634,17 +634,7 @@ export default function App() {
       */}
       <div className="w-full max-w-md min-h-screen bg-[#030E26] shadow-2xl relative flex flex-col overflow-hidden border-x border-[#081B4B]/30 select-none">
         
-        {/* Dynamic Mobile Top Ambient Layout Bar representing pristine system aesthetics */}
-        <div className="px-5 pt-3 pb-1 flex justify-between items-center text-[11px] font-mono tracking-widest text-slate-400 select-none bg-slate-950/10 z-50">
-          <div className="flex items-center space-x-1.5">
-            <span className="font-extrabold text-[#FF7A00]">₹</span>
-            <span className="font-bold tracking-tight">{platformName} Live</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping"></span>
-            <span>LTE Secure</span>
-          </div>
-        </div>
+
 
         <div className="flex-1 flex flex-col relative overflow-y-auto">
           <AnimatePresence mode="wait">
