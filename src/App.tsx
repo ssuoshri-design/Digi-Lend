@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Shield, Bell, HelpCircle, User, CreditCard, ChevronRight, 
-  ArrowLeft, CheckCircle2, DollarSign, Clock, FileText, Send, Lock,
+  ArrowLeft, CheckCircle2, IndianRupee, Clock, FileText, Send, Lock,
   RefreshCw, Award, Camera, Check, Building, FileCheck, ArrowUpRight, Zap,
   Sparkles, History, Wallet, LogOut, MessageSquare, Key, Phone, Settings, AlertCircle, RefreshCcw
 } from "lucide-react";
@@ -734,7 +734,7 @@ export default function App() {
                           <div className="absolute inset-0 rounded-full bg-[#FF7A00]/5 animate-ping" style={{ animationDuration: "3s" }}></div>
                           <Clock className="w-16 h-16 text-[#FF7A00] stroke-[1.5]" />
                           <div className="absolute bottom-6 right-6 bg-[#22C55E] p-2.5 rounded-2xl shadow-lg border border-slate-900 animate-bounce">
-                            <DollarSign className="w-5 h-5 text-white" />
+                            <IndianRupee className="w-5 h-5 text-white" />
                           </div>
                         </div>
 

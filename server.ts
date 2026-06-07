@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
@@ -362,6 +363,45 @@ const database = {
   ] as AuditLog[],
 };
 
+// Create a deep copy of the original seed database to support precise resetting
+const INITIAL_DATABASE = JSON.parse(JSON.stringify(database));
+
+const DB_FILE_PATH = path.join(process.cwd(), "database.json");
+
+function saveDatabase() {
+  try {
+    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(database, null, 2), "utf-8");
+  } catch (error) {
+    console.error("Failed to write database.json auto-persistence file:", error);
+  }
+}
+
+function loadDatabase() {
+  try {
+    if (fs.existsSync(DB_FILE_PATH)) {
+      const raw = fs.readFileSync(DB_FILE_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (parsed) {
+        if (parsed.settings) Object.assign(database.settings, parsed.settings);
+        if (parsed.users) database.users = parsed.users;
+        if (parsed.loans) database.loans = parsed.loans;
+        if (parsed.repayments) database.repayments = parsed.repayments;
+        if (parsed.notifications) database.notifications = parsed.notifications;
+        if (parsed.tickets) database.tickets = parsed.tickets;
+        if (parsed.auditLogs) database.auditLogs = parsed.auditLogs;
+        console.log("[🟢] Database loaded successfully from database.json");
+      }
+    } else {
+      saveDatabase();
+    }
+  } catch (error) {
+    console.error("Failed to read/load database.json, using default seed memory:", error);
+  }
+}
+
+// Initial session bootstrap loading from file
+loadDatabase();
+
 // HELPERS
 function addAuditLog(category: "SERVICE" | "SECURITY" | "RISK" | "DISBURSEMENT", level: "INFO" | "WARNING" | "CRITICAL", message: string) {
   const log: AuditLog = {
@@ -373,6 +413,7 @@ function addAuditLog(category: "SERVICE" | "SECURITY" | "RISK" | "DISBURSEMENT",
   };
   database.auditLogs.unshift(log);
   if (database.auditLogs.length > 50) database.auditLogs.pop();
+  saveDatabase();
 }
 
 // REST API Endpoints
@@ -384,8 +425,15 @@ app.get("/api/db", (req, res) => {
 
 // Reset Database/Demo State
 app.post("/api/db/reset", (req, res) => {
-  // Retain a baseline
-  res.json({ status: "ok" });
+  database.settings = JSON.parse(JSON.stringify(INITIAL_DATABASE.settings));
+  database.users = JSON.parse(JSON.stringify(INITIAL_DATABASE.users));
+  database.loans = JSON.parse(JSON.stringify(INITIAL_DATABASE.loans));
+  database.repayments = JSON.parse(JSON.stringify(INITIAL_DATABASE.repayments));
+  database.notifications = JSON.parse(JSON.stringify(INITIAL_DATABASE.notifications));
+  database.tickets = JSON.parse(JSON.stringify(INITIAL_DATABASE.tickets));
+  database.auditLogs = JSON.parse(JSON.stringify(INITIAL_DATABASE.auditLogs));
+  saveDatabase();
+  res.json({ status: "ok", database });
 });
 
 // Update or register user
@@ -652,6 +700,7 @@ app.post("/api/support/ticket", (req, res) => {
   };
   
   database.tickets.push(newTicket);
+  saveDatabase();
   res.json({ success: true, ticket: newTicket });
 });
 
@@ -797,6 +846,7 @@ app.post("/api/gemini/support", async (req, res) => {
       createdAt: new Date().toISOString(),
     };
     ticket.messages.push(botMsg);
+    saveDatabase();
     
     return res.json({ success: true, messages: ticket.messages, ticketId: ticket.id });
   }
@@ -830,6 +880,7 @@ Assistant: Keep the reply within 2-3 concise sentences. Help the user with their
       createdAt: new Date().toISOString(),
     };
     ticket.messages.push(botMsg);
+    saveDatabase();
     
     res.json({ success: true, messages: ticket.messages, ticketId: ticket.id });
   } catch (error: any) {
@@ -857,6 +908,7 @@ app.post("/api/admin/settings/update", (req, res) => {
     database.settings.logoUrl = logoUrl;
   }
   
+  saveDatabase();
   addAuditLog("SECURITY", "WARNING", `Admin override global settings. PlatformName: ${database.settings.platformName}, Interest: ${database.settings.interestRate}%`);
   res.json({ success: true, settings: database.settings });
 });
@@ -948,6 +1000,7 @@ app.post("/api/admin/notification/push", (req, res) => {
     createdAt: new Date().toISOString()
   };
   database.notifications.push(newNotif);
+  saveDatabase();
   res.json({ success: true, notification: newNotif });
 });
 
