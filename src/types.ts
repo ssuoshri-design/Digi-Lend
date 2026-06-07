@@ -92,7 +92,18 @@ export interface AuditLog {
   message: string;
 }
 
+export interface AppSettings {
+  interestRate: number;
+  processingFeePercent: number;
+  gstPercent: number;
+  platformName: string;
+  swiggyCashbackPercent: number;
+  zeroCostTenureMonths: number[];
+  logoUrl?: string;
+}
+
 export interface FullDatabaseState {
+  settings?: AppSettings;
   users: UserProfile[];
   loans: Loan[];
   repayments: Repayment[];

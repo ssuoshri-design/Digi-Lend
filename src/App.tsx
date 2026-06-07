@@ -18,6 +18,15 @@ export default function App() {
   const [otpTimer, setOtpTimer] = useState<number>(30);
   const [activeTab, setActiveTab] = useState<"home" | "loans" | "activity" | "support" | "profile">("home");
 
+  // Bottom sheets & Interactive Overlay Panels
+  const [activeBottomSheet, setActiveBottomSheet] = useState<"EMI_CALC" | "REWARDS" | "REFERRAL" | "OFFER_DETAIL" | "MESSAGE" | "CONFIRM_RESET" | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<{ title: string; tag: string; description: string; instruction: string; accentColor: string } | null>(null);
+  const [copiedToast, setCopiedToast] = useState<boolean>(false);
+  const [scratchedBonus, setScratchedBonus] = useState<boolean>(false);
+  const [scratchingLoader, setScratchingLoader] = useState<boolean>(false);
+  const [emiInputAmount, setEmiInputAmount] = useState<number>(15000);
+  const [emiInputTenure, setEmiInputTenure] = useState<number>(30);
+
   // KYC Multi-Step Stage
   const [kycStep, setKycStep] = useState<number>(1); // 1 to 5
   const [panNumber, setPanNumber] = useState<string>("ABCDE1234F");
@@ -47,6 +56,11 @@ export default function App() {
     tickets: [],
     auditLogs: [],
   });
+  const platformName = fintechDb.settings?.platformName || "DigiLend";
+  const logoUrl = fintechDb.settings?.logoUrl || "";
+  const adminInterestRate = fintechDb.settings?.interestRate ?? 2.5;
+  const adminFeePercent = fintechDb.settings?.processingFeePercent ?? 3;
+  const adminGstPercent = fintechDb.settings?.gstPercent ?? 18;
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [isLoadingFeed, setIsLoadingFeed] = useState<boolean>(true);
 
@@ -74,6 +88,201 @@ export default function App() {
     }
   ]);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+
+  // Admin Panel states
+  const [isAdminPasswordModalOpen, setIsAdminPasswordModalOpen] = useState<boolean>(false);
+  const [adminPasswordInput, setAdminPasswordInput] = useState<string>("");
+  const [adminPasswordError, setAdminPasswordError] = useState<string>("");
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState<boolean>(false);
+  const [adminActiveTab, setAdminActiveTab] = useState<"settings" | "users" | "loans" | "notifications">("settings");
+
+  const handleAdminAuth = () => {
+    if (adminPasswordInput === "Admin@2026") {
+      setIsAdminPasswordModalOpen(false);
+      setAdminPasswordError("");
+      setAdminPasswordInput("");
+      setIsAdminPanelOpen(true);
+    } else {
+      setAdminPasswordError("Invalid password! Please verify and retry.");
+    }
+  };
+
+  // Editable fields for admin settings
+  const [editedPlatformName, setEditedPlatformName] = useState<string>("");
+  const [editedLogoUrl, setEditedLogoUrl] = useState<string>("");
+  const [editedInterestRate, setEditedInterestRate] = useState<number>(2.5);
+  const [editedProcessingFee, setEditedProcessingFee] = useState<number>(3);
+  const [editedGst, setEditedGst] = useState<number>(18);
+  const [editedCashback, setEditedCashback] = useState<number>(25);
+
+  // Selected state for editing specific objects
+  const [selectedAdminUser, setSelectedAdminUser] = useState<any | null>(null);
+  const [selectedAdminLoan, setSelectedAdminLoan] = useState<any | null>(null);
+
+  // New alert injection state
+  const [notifTitle, setNotifTitle] = useState<string>("");
+  const [notifMessage, setNotifMessage] = useState<string>("");
+  const [notifType, setNotifType] = useState<"INFO" | "SUCCESS" | "WARNING" | "CRITICAL">("INFO");
+
+  // New audit log injection state
+  const [auditMsg, setAuditMsg] = useState<string>("");
+  const [auditCategory, setAuditCategory] = useState<"SERVICE" | "SECURITY" | "RISK" | "DISBURSEMENT">("SERVICE");
+  const [auditLevel, setAuditLevel] = useState<"INFO" | "WARNING" | "CRITICAL">("INFO");
+
+  // Pre-populate admin fields when server values stream in
+  const [hasInitializedAdminFields, setHasInitializedAdminFields] = useState<boolean>(false);
+  useEffect(() => {
+    if (fintechDb.settings && !hasInitializedAdminFields) {
+      setEditedPlatformName(fintechDb.settings.platformName);
+      setEditedInterestRate(fintechDb.settings.interestRate);
+      setEditedProcessingFee(fintechDb.settings.processingFeePercent);
+      setEditedGst(fintechDb.settings.gstPercent);
+      setEditedCashback(fintechDb.settings.swiggyCashbackPercent);
+      setEditedLogoUrl(fintechDb.settings.logoUrl || "");
+      setHasInitializedAdminFields(true);
+    }
+  }, [fintechDb.settings, hasInitializedAdminFields]);
+
+  // Admin Operation Handlers
+  const updateAdminSettingsOnServer = async () => {
+    try {
+      const res = await fetch("/api/admin/settings/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          platformName: editedPlatformName,
+          interestRate: editedInterestRate,
+          processingFeePercent: editedProcessingFee,
+          gstPercent: editedGst,
+          swiggyCashbackPercent: editedCashback,
+          logoUrl: editedLogoUrl,
+        }),
+      });
+      if (res.ok) {
+        if (currentUser) {
+          await fetch("/api/admin/notification/push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: currentUser.id,
+              title: "System Parameters Shifted",
+              message: `Administrator has set the base interest rate to ${editedInterestRate}% with dynamic computational rules.`,
+              type: "WARNING"
+            }),
+          });
+        }
+        await syncWithBackend();
+        alert("Global platform settings updated & propagated to standard client!");
+      } else {
+        alert("Server error shifting settings.");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const updateAdminUserOnServer = async (userObj: any) => {
+    try {
+      const res = await fetch("/api/admin/users/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(userObj),
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        alert("Success: Profile parameters overridden successfully!");
+        setSelectedAdminUser(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const updateAdminLoanOnServer = async (loanObj: any) => {
+    try {
+      const res = await fetch("/api/admin/loans/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loanObj),
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        alert("Success: Loan ledger state modified completely!");
+        setSelectedAdminLoan(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const deleteAdminDataOnServer = async (type: "USER" | "LOAN", id: string) => {
+    if (!window.confirm(`Warning: Are you absolutely sure you want to permanently delete this ${type === "USER" ? "user profile" : "loan structure"} ?`)) return;
+    try {
+      const res = await fetch("/api/admin/data/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, id }),
+      });
+      if (res.ok) {
+        await syncWithBackend();
+        alert("Destructive deletion complete.");
+        setSelectedAdminUser(null);
+        setSelectedAdminLoan(null);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const injectAdminAuditLog = async () => {
+    if (!auditMsg.trim()) return;
+    try {
+      const res = await fetch("/api/admin/audit/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: auditCategory,
+          level: auditLevel,
+          message: auditMsg
+        }),
+      });
+      if (res.ok) {
+        setAuditMsg("");
+        await syncWithBackend();
+        alert("Frictionless log inserted into core Audit ledger.");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const pushAdminNotification = async () => {
+    if (!notifTitle.trim() || !notifMessage.trim()) return;
+    if (!currentUser) {
+      alert("Please login first or select an active account so you can inject targeted feeds.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/admin/notification/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          title: notifTitle,
+          message: notifMessage,
+          type: notifType
+        }),
+      });
+      if (res.ok) {
+        setNotifTitle("");
+        setNotifMessage("");
+        await syncWithBackend();
+        alert("Direct notification dispatched successfully!");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Sync DB interval
   const syncWithBackend = async () => {
@@ -394,9 +603,9 @@ export default function App() {
   );
 
   // Dynamic values during Apply Loan Selection Slider
-  const calcInterest = Math.round(applyAmount * (0.025 * (applyTenure / 30)));
-  const calcFee = Math.round(applyAmount * 0.03); // 3%
-  const calcGst = Math.round(calcFee * 0.18); // 18% GST
+  const calcInterest = Math.round(applyAmount * ((adminInterestRate / 100) * (applyTenure / 30)));
+  const calcFee = Math.round(applyAmount * (adminFeePercent / 100));
+  const calcGst = Math.round(calcFee * (adminGstPercent / 100));
   const calcTotalRepay = applyAmount + calcInterest;
   const calcDisbursal = applyAmount - calcFee - calcGst;
 
@@ -427,9 +636,9 @@ export default function App() {
         
         {/* Dynamic Mobile Top Ambient Layout Bar representing pristine system aesthetics */}
         <div className="px-5 pt-3 pb-1 flex justify-between items-center text-[11px] font-mono tracking-widest text-slate-400 select-none bg-slate-950/10 z-50">
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1.5">
             <span className="font-extrabold text-[#FF7A00]">₹</span>
-            <span className="font-bold tracking-tight">DigiLend Live</span>
+            <span className="font-bold tracking-tight">{platformName} Live</span>
           </div>
           <div className="flex items-center space-x-2">
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-ping"></span>
@@ -459,19 +668,30 @@ export default function App() {
 
                 <div className="flex flex-col items-center justify-center flex-1 space-y-4">
                   {/* Floating Particle/Glow Shield Brand Logo */}
-                  <motion.div 
-                    initial={{ scale: 0.85, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
-                    className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-[#FF7A00] to-[#E65C00] p-0.5 shadow-[0_0_40px_rgba(255,122,0,0.35)] flex items-center justify-center relative overflow-hidden"
-                  >
-                    <div className="absolute inset-x-0 bottom-0 top-1/2 bg-slate-950/25"></div>
-                    <Shield className="w-12 h-12 text-white stroke-[2]" />
-                    <span className="absolute text-lg font-black font-mono text-white mt-1">₹</span>
-                  </motion.div>
+                  {logoUrl ? (
+                    <motion.div 
+                      initial={{ scale: 0.85, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
+                      className="h-28 w-auto flex items-center justify-center"
+                    >
+                      <img src={logoUrl} alt={`${platformName} Logo`} className="max-h-28 max-w-[260px] object-contain" referrerPolicy="no-referrer" />
+                    </motion.div>
+                  ) : (
+                    <motion.div 
+                      initial={{ scale: 0.85, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
+                      className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-[#FF7A00] to-[#E65C00] p-0.5 shadow-[0_0_40px_rgba(255,122,0,0.35)] flex items-center justify-center relative overflow-hidden"
+                    >
+                      <div className="absolute inset-x-0 bottom-0 top-1/2 bg-slate-950/25"></div>
+                      <Shield className="w-12 h-12 text-white stroke-[2]" />
+                      <span className="absolute text-lg font-black font-mono text-white mt-1">₹</span>
+                    </motion.div>
+                  )}
 
                   <div className="space-y-1">
-                    <h1 className="text-3xl font-black tracking-tight text-white">DigiLend</h1>
+                    <h1 className="text-3xl font-black tracking-tight text-white">{platformName}</h1>
                     <p className="text-xs tracking-widest text-[#FF7A00] uppercase font-mono font-black">
                       Fast. Secure. Digital.
                     </p>
@@ -499,7 +719,13 @@ export default function App() {
                 className="flex-1 p-6 flex flex-col justify-between"
               >
                 <div className="flex justify-between items-center pt-2">
-                  <span className="text-sm font-black tracking-wider text-[#FF7A00]">DigiLend</span>
+                  <div className="flex items-center">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt={`${platformName} Logo`} className="h-14 max-w-[150px] object-contain" referrerPolicy="no-referrer" />
+                    ) : (
+                      <span className="text-sm font-black tracking-wider text-[#FF7A00]">{platformName}</span>
+                    )}
+                  </div>
                   <button onClick={() => setStage("LOGIN")} className="text-xs text-[#6B7280] hover:text-[#FF7A00] uppercase font-bold tracking-wider">Skip</button>
                 </div>
 
@@ -633,13 +859,19 @@ export default function App() {
                 className="flex-1 p-6 flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center space-x-2 pt-2 pb-6">
+                  <div className="flex items-center space-x-2 pt-2 pb-4">
                     <button onClick={() => setStage("ONBOARDING")} className="p-1 rounded-full text-slate-400 hover:text-white">
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   </div>
 
-                  <h2 className="text-3xl font-black tracking-tight text-white leading-tight">Welcome to DigiLend</h2>
+                  {logoUrl && (
+                    <div className="mb-6 flex justify-start">
+                      <img src={logoUrl} alt={`${platformName} Logo`} className="h-18 max-w-[180px] object-contain" referrerPolicy="no-referrer" />
+                    </div>
+                  )}
+
+                  <h2 className="text-3xl font-black tracking-tight text-white leading-tight font-sans">Welcome to {platformName}</h2>
                   <p className="text-xs text-[#6B7280] mt-1.5 leading-relaxed">
                     Fast. Secure. Digital. Please input your secure mobile code to retrieve or register your loan files.
                   </p>
@@ -673,7 +905,7 @@ export default function App() {
                   >
                     Continue
                   </button>
-                  <p className="text-[10px] text-zinc-500 text-center mt-3 font-mono">By proceeding, you authorize DigiLend to match CIBIL information.</p>
+                  <p className="text-[10px] text-zinc-500 text-center mt-3 font-mono">By proceeding, you authorize {platformName} to match CIBIL information.</p>
                 </div>
               </motion.div>
             )}
@@ -1318,51 +1550,69 @@ export default function App() {
                         <div className="grid grid-cols-3 gap-2.5 text-center text-xs font-sans">
                           
                           <button 
-                            onClick={() => { if (!myActiveLoan) { setApplyStep(1); setStage("APPLY_LOAN"); } else { alert("You already have an outstanding loan ! Please repay to apply again."); } }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5"
+                            onClick={() => { 
+                              if (!myActiveLoan) { 
+                                setApplyStep(1); 
+                                setStage("APPLY_LOAN"); 
+                              } else { 
+                                setSelectedOffer({
+                                  title: "Active Credit Outstanding",
+                                  tag: "LIMIT ASSIGNED",
+                                  description: `You currently have an active loan outstanding principal balance matching ₹${myActiveLoan.outstandingBalance} due to settle on ${myActiveLoan.dueDate}.`,
+                                  instruction: "Before you can request further cash disbursements on your profile limit, please satisfy the outstanding dues. Select 'Repay Now' on your home screen dashboard to instantly complete a secure UPI/bank transfer settlement.",
+                                  accentColor: "red"
+                                });
+                                setActiveBottomSheet("OFFER_DETAIL");
+                              } 
+                            }}
+                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
                           >
                             <Zap className="w-5 h-5 text-[#FF7A00]" />
-                            <span className="text-[10.5px] text-zinc-200">Apply Loan</span>
+                            <span className="text-[10.5px] text-zinc-200 font-medium">Apply Loan</span>
                           </button>
 
                           <button 
                             onClick={() => { setActiveTab("activity"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5"
+                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
                           >
                             <History className="w-5 h-5 text-zinc-300" />
-                            <span className="text-[10.5px] text-zinc-200">Loan History</span>
+                            <span className="text-[10.5px] text-zinc-200 font-medium">Loan History</span>
                           </button>
 
                           <button 
-                            onClick={() => { alert("DigiLend EMI Calculator: Monthly rate computed flat at 2.5% simpleinterest. Ranging 7 to 90 days options."); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5"
+                            onClick={() => { 
+                              setEmiInputAmount(Math.min(20000, currentUser?.maxEligibleAmount || 20000));
+                              setEmiInputTenure(30);
+                              setActiveBottomSheet("EMI_CALC"); 
+                            }}
+                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
                           >
                             <FileCheck className="w-5 h-5 text-blue-400" />
-                            <span className="text-[10.5px] text-zinc-200">EMI Calc</span>
+                            <span className="text-[10.5px] text-zinc-200 font-medium font-sans">EMI Calc</span>
                           </button>
 
                           <button 
-                            onClick={() => { alert("DigiLend Rewards: Pay timely to score DigiCoins redeemable on partner vouchers (Myntra, Swiggy)!"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5"
+                            onClick={() => { setActiveBottomSheet("REWARDS"); }}
+                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
                           >
                             <Award className="w-5 h-5 text-[#22C55E]" />
-                            <span className="text-[10.5px] text-zinc-200">Rewards</span>
+                            <span className="text-[10.5px] text-zinc-200 font-medium">Rewards</span>
                           </button>
 
                           <button 
                             onClick={() => { setActiveTab("support"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5"
+                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
                           >
                             <MessageSquare className="w-5 h-5 text-cyan-400" />
-                            <span className="text-[10.5px] text-zinc-200">Chat Support</span>
+                            <span className="text-[10.5px] text-zinc-200 font-medium">Support</span>
                           </button>
 
                           <button 
-                            onClick={() => { alert("Refer & Earn: Invite fellow creditworthy friends and get ₹250 flat cash credited directly into your synced savings!"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5"
+                            onClick={() => { setActiveBottomSheet("REFERRAL"); }}
+                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
                           >
                             <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
-                            <span className="text-[10.5px] text-zinc-200">Refer & Earn</span>
+                            <span className="text-[10.5px] text-zinc-200 font-medium">Refer & Earn</span>
                           </button>
 
                         </div>
@@ -1374,19 +1624,55 @@ export default function App() {
                         
                         <div className="flex space-x-3.5 overflow-x-auto pb-2 pr-2 scrollbar-none">
                           
-                          <div className="p-3.5 bg-gradient-to-r from-teal-950 to-[#030E26] rounded-2xl border border-teal-900/30 flex-none w-52 space-y-1.5 text-xs text-left">
+                          <div 
+                            onClick={() => {
+                              setSelectedOffer({
+                                title: "Swiggy Gourmet Flat 25% Cashbacks",
+                                tag: "SWIGGY GOURMET",
+                                description: "Get massive cash return percentages credited directly into your synced savings box.",
+                                instruction: "Transact inside the official Swiggy application using credit limits sourced from DigiLend or link partner wallets post disbursal verification. Minimum transaction ticket ₹299. Cashback settles in 24h.",
+                                accentColor: "teal"
+                              });
+                              setActiveBottomSheet("OFFER_DETAIL");
+                            }}
+                            className="p-3.5 bg-gradient-to-r from-teal-950 to-[#030E26] rounded-2xl border border-teal-900/30 flex-none w-52 space-y-1.5 text-xs text-left cursor-pointer hover:border-teal-400/40 transition-all"
+                          >
                             <span className="bg-teal-500/20 text-teal-400 font-mono text-[9px] font-black px-2 py-0.5 rounded-full inline-block">SWIGGY GOURMET</span>
                             <h5 className="font-bold text-white leading-tight">Get 25% Flat Cashbacks on food</h5>
                             <p className="text-[9.5px] text-[#6B7280]">Complete payment utilizing verified loan cards.</p>
                           </div>
 
-                          <div className="p-3.5 bg-gradient-to-r from-indigo-950 to-[#030E26] rounded-2xl border border-indigo-900/30 flex-none w-52 space-y-1.5 text-xs text-left">
+                          <div 
+                            onClick={() => {
+                              setSelectedOffer({
+                                title: "Shop Latest Smartphones on Zero Cost EMI",
+                                tag: "ZERO COST EMI",
+                                description: "Split your shopping payments easily on top partners (Amazon, Flipkart, Apple Retail) into interest free EMIs.",
+                                instruction: "Simply log your order on our partner checkout screens, select DigiLend card as standard repayment module, and choose convenient 3, 6, or 9 months tenure maps flat at 0% annual percentage cost.",
+                                accentColor: "indigo"
+                              });
+                              setActiveBottomSheet("OFFER_DETAIL");
+                            }}
+                            className="p-3.5 bg-gradient-to-r from-indigo-950 to-[#030E26] rounded-2xl border border-indigo-900/30 flex-none w-52 space-y-1.5 text-xs text-left cursor-pointer hover:border-indigo-400/40 transition-all"
+                          >
                             <span className="bg-indigo-500/20 text-indigo-400 font-mono text-[9px] font-black px-2 py-0.5 rounded-full inline-block">ZERO COST EMI</span>
                             <h5 className="font-bold text-white leading-tight">Shop smartphones on No-Cost EMI</h5>
                             <p className="text-[9.5px] text-[#6B7280]">Partner networks across Flipkart, Vijay Sales.</p>
                           </div>
 
-                          <div className="p-3.5 bg-gradient-to-r from-amber-950 to-[#030E26] rounded-2xl border border-amber-900/30 flex-none w-52 space-y-1.5 text-xs text-left">
+                          <div 
+                            onClick={() => {
+                              setSelectedOffer({
+                                title: "Preset Travel Holiday Booking",
+                                tag: "PRESET TRAVEL",
+                                description: "Never hold booking plans back! Fly immediately with 0% interest booking vouchers.",
+                                instruction: "Select and secure flight tickets inside MakeMyTrip or EaseMyTrip app clients using active personal DigiLend loans. Simple, flat three months interest-free repayment terms apply on your subsequent ledger bills.",
+                                accentColor: "amber"
+                              });
+                              setActiveBottomSheet("OFFER_DETAIL");
+                            }}
+                            className="p-3.5 bg-gradient-to-r from-amber-950 to-[#030E26] rounded-2xl border border-amber-900/30 flex-none w-52 space-y-1.5 text-xs text-left cursor-pointer hover:border-amber-400/40 transition-all"
+                          >
                             <span className="bg-[#FF7A00]/20 text-[#FF7A00] font-mono text-[9px] font-black px-2 py-0.5 rounded-full inline-block">PRESET TRAVEL</span>
                             <h5 className="font-bold text-white leading-tight">Book Flights with zero advance pay</h5>
                             <p className="text-[9.5px] text-[#6B7280]">Enjoy holiday trips; pay in simple 3 EMIs.</p>
@@ -1624,11 +1910,16 @@ export default function App() {
                         
                         <button 
                           onClick={() => {
-                            if (window.confirm("Verify: Do you really wish to reset all in-memory simulation credentials?")) {
-                              resetAllAppDemoData();
-                            }
+                            setSelectedOffer({
+                              title: "Confirm Database Reset",
+                              tag: "SYSTEM OVERWRITE",
+                              description: "Warning: Performing a system reset will clear any local mock states, un-disburse any simulated loans, and restore the default demo user profile list (Aniket Sharma, Priya Patel, Rahul Varma).",
+                              instruction: "This will flush all in-memory database records. This is destructive and irreversible.",
+                              accentColor: "red"
+                            });
+                            setActiveBottomSheet("CONFIRM_RESET" as any);
                           }}
-                          className="w-full bg-[#081B4B]/30 border border-[#081B4B] hover:bg-[#FF7A00]/10 text-white text-xs font-bold py-3.5 rounded-xl flex items-center justify-center space-x-1.5"
+                          className="w-full bg-[#081B4B]/30 border border-[#081B4B] hover:bg-[#FF7A00]/10 text-white text-xs font-bold py-3.5 rounded-xl flex items-center justify-center space-x-1.5 cursor-pointer transition-all"
                         >
                           <RefreshCw className="w-4 h-4 text-[#FF7A00]" />
                           <span>Reset Database Session</span>
@@ -1778,15 +2069,15 @@ export default function App() {
                       {/* Live inline simple math calculations */}
                       <div className="bg-[#081B4B]/10 p-4 rounded-xl border border-slate-905 text-xs space-y-2">
                         <div className="flex justify-between">
-                          <span className="text-slate-400">Monthly flat Interest (2.5%):</span>
+                          <span className="text-slate-400">Monthly flat Interest ({adminInterestRate}%):</span>
                           <span className="font-mono text-zinc-200">₹{calcInterest}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-400">Processing Fee (3%):</span>
+                          <span className="text-slate-400">Processing Fee ({adminFeePercent}%):</span>
                           <span className="font-mono text-zinc-200">₹{calcFee}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-400">GST on fee (18%):</span>
+                          <span className="text-slate-400">GST on fee ({adminGstPercent}%):</span>
                           <span className="font-mono text-[#D05C00]">₹{calcGst}</span>
                         </div>
                         <div className="border-t border-slate-900 pt-2 flex justify-between font-bold text-white">
@@ -1819,7 +2110,7 @@ export default function App() {
                           <span className="text-zinc-400 font-mono">₹{calcFee + calcGst}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-zinc-500">Accrued Interest (2.5%)</span>
+                          <span className="text-zinc-500">Accrued Interest ({adminInterestRate}%)</span>
                           <span className="text-zinc-400 font-mono">₹{calcInterest}</span>
                         </div>
                         <div className="border-t border-slate-900 pt-2 flex justify-between">
@@ -2082,6 +2373,1087 @@ export default function App() {
             )}
 
           </AnimatePresence>
+        </div>
+
+        {/* BOTTOM SHEETS FOR INTERACTIVE GATEWAYS */}
+        <AnimatePresence>
+          {activeBottomSheet && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs z-50 flex flex-col justify-end"
+            >
+              {/* Backdrop dismiss helper */}
+              <div className="absolute inset-0 animate-fade-in" onClick={() => setActiveBottomSheet(null)}></div>
+              
+              <motion.div 
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                className="bg-[#030E26] border-t border-[#081B4B]/80 rounded-t-[32px] p-6 max-h-[85%] overflow-y-auto relative z-50 w-full text-left space-y-5 shadow-2xl"
+              >
+                {/* Decorative pull bar */}
+                <div className="w-12 h-1.5 bg-slate-800 rounded-full mx-auto cursor-pointer" onClick={() => setActiveBottomSheet(null)}></div>
+
+                {/* Header row */}
+                <div className="flex justify-between items-center pb-2 border-b border-slate-900">
+                  <span className="text-[10px] font-mono font-black text-[#FF7A00] uppercase tracking-widest bg-[#FF7A00]/10 px-2.5 py-1 rounded-md">
+                    {activeBottomSheet === "EMI_CALC" && "DigiLend EMI Calculator"}
+                    {activeBottomSheet === "REWARDS" && "Loyalty Rewards Club"}
+                    {activeBottomSheet === "REFERRAL" && "Referral Program"}
+                    {activeBottomSheet === "OFFER_DETAIL" && (selectedOffer?.tag || "Exclusive Offer Detail")}
+                  </span>
+                  <button 
+                    onClick={() => setActiveBottomSheet(null)}
+                    className="text-xs font-bold text-zinc-400 hover:text-white px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-900 transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+
+                {/* 1. EMI CALCULATOR BOTTOM SHEET */}
+                {activeBottomSheet === "EMI_CALC" && (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-lg font-black text-white">Dynamic EMI Calculator</h4>
+                      <p className="text-xs text-[#6B7280]">Drag sliders to instantly preview fee models, simple interest rates, and total repayments.</p>
+                    </div>
+
+                    <div className="bg-slate-950 p-4 rounded-xl border border-slate-900 space-y-4">
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-mono font-bold">
+                          <span className="text-zinc-200">CREDIT LIMIT</span>
+                          <span className="text-[#FF7A00]">₹{emiInputAmount.toLocaleString()}</span>
+                        </div>
+                        <input 
+                          type="range"
+                          min="1000"
+                          max="20000"
+                          step="1000"
+                          value={emiInputAmount}
+                          onChange={(e) => setEmiInputAmount(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-slate-800 accent-[#FF7A00]"
+                        />
+                        <div className="flex justify-between text-[9px] text-zinc-500 font-mono">
+                          <span>₹1,000</span>
+                          <span>₹20,000</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-mono font-bold">
+                          <span className="text-zinc-200">SELECT TENURE</span>
+                          <span className="text-[#22C55E]">{emiInputTenure} Days Limit</span>
+                        </div>
+                        <input 
+                          type="range"
+                          min="7"
+                          max="90"
+                          step="1"
+                          value={emiInputTenure}
+                          onChange={(e) => setEmiInputTenure(Number(e.target.value))}
+                          className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-slate-800 accent-[#22C55E]"
+                        />
+                        <div className="flex justify-between text-[9px] text-zinc-500 font-mono">
+                          <span>7 Days</span>
+                          <span>90 Days</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Math Summary Cards */}
+                    <div className="bg-[#081B4B]/25 p-4 rounded-xl border border-[#081B4B]/30 text-xs space-y-2.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Flat Monthly Interest Rate</span>
+                        <span className="font-mono text-white font-semibold">{adminInterestRate}% Flat</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Computed simple interest fraction</span>
+                        <span className="font-mono text-white font-semibold">₹{Math.round(emiInputAmount * ((adminInterestRate / 100) * (emiInputTenure / 30)))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Standard Processing Fee ({adminFeePercent}% value)</span>
+                        <span className="font-mono text-zinc-200">₹{Math.round(emiInputAmount * (adminFeePercent / 100))}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Integrated GST fee ({adminGstPercent}% on fee)</span>
+                        <span className="font-mono text-zinc-200">₹{Math.round(Math.round(emiInputAmount * (adminFeePercent / 100)) * (adminGstPercent / 100))}</span>
+                      </div>
+                      <div className="border-t border-slate-900 pt-2.5 flex justify-between font-bold text-white">
+                        <span>Net Disbursable Fund</span>
+                        <span className="text-green-400 font-mono">₹{emiInputAmount - Math.round(emiInputAmount * (adminFeePercent / 100)) - Math.round(Math.round(emiInputAmount * (adminFeePercent / 100)) * (adminGstPercent / 100))}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-white">
+                        <span>Total Amount Repayable</span>
+                        <span className="text-[#FF7A00] font-mono">₹{emiInputAmount + Math.round(emiInputAmount * ((adminInterestRate / 100) * (emiInputTenure / 30)))}</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={() => {
+                        setApplyAmount(emiInputAmount);
+                        setApplyTenure(emiInputTenure);
+                        setActiveBottomSheet(null);
+                        if (!myActiveLoan) {
+                          setApplyStep(1);
+                          setStage("APPLY_LOAN");
+                        } else {
+                          setSelectedOffer({
+                            title: "Active Credit Outstanding",
+                            tag: "LIMIT ASSIGNED",
+                            description: `You currently have an active loan outstanding principal balance matching ₹${myActiveLoan.outstandingBalance} due to settle on ${myActiveLoan.dueDate}.`,
+                            instruction: "Before you can request further cash disbursements on your profile limit, please satisfy the outstanding dues. Select 'Repay Now' on your home screen dashboard to instantly complete a secure UPI/bank transfer settlement.",
+                            accentColor: "red"
+                          });
+                          setActiveBottomSheet("OFFER_DETAIL");
+                        }
+                      }}
+                      className="w-full bg-[#FF7A00] text-white py-3.5 rounded-xl font-bold font-sans text-xs flex justify-center items-center space-x-1 cursor-pointer transition-all hover:bg-orange-600"
+                    >
+                      <span>Apply With This Calculation</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. LOYALTY REWARDS CLUB BOTTOM SHEET */}
+                {activeBottomSheet === "REWARDS" && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-lg font-black text-white">Loyalty & Scratchcards</h4>
+                        <p className="text-xs text-[#6B7280]">Pay your outstanding bills dynamically to increase limit tiers.</p>
+                      </div>
+                      <div className="bg-[#22C55E]/10 p-2 rounded-xl text-center border border-[#22C55E]/30 text-xs shrink-0">
+                        <span className="text-[10px] text-zinc-400 block font-mono">MY BALANCE</span>
+                        <strong className="text-[#22C55E] font-black font-mono">350 Coins</strong>
+                      </div>
+                    </div>
+
+                    {/* Tier Progress bar */}
+                    <div className="p-4 bg-slate-950 rounded-xl border border-slate-900 space-y-2 text-xs">
+                      <div className="flex justify-between font-mono text-[10px]">
+                        <span className="text-zinc-500">Tier Level: Bronze Partner</span>
+                        <span className="text-[#FF7A00] font-bold">Silver Tier at 500 Coins</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-900 rounded-full overflow-hidden">
+                        <div className="w-[70%] h-full bg-[#FF7A00] rounded-full"></div>
+                      </div>
+                      <span className="text-[9.5px] text-zinc-500 block">Settle 1 more loan timeline completely clean to claim +150 DigiCoins bonus!</span>
+                    </div>
+
+                    {/* Interactive scratchcards section */}
+                    <div className="space-y-3">
+                      <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-slate-500 block">Your Scratched & Available Rewards</span>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        
+                        {/* Scratched Reward */}
+                        <div className="p-3 bg-slate-950 rounded-xl border border-slate-900 flex flex-col justify-between text-left space-y-4 relative overflow-hidden opacity-60">
+                          <span className="bg-zinc-800 text-zinc-400 text-[8px] font-mono px-2 py-0.5 rounded-full inline-block self-start">SCRATCHED</span>
+                          <div>
+                            <strong className="text-xs font-bold text-white block">₹100 Swiggy Voucher</strong>
+                            <span className="text-[9px] text-[#6B7280] font-mono mt-0.5 block">CODE: SWG100LEND</span>
+                          </div>
+                        </div>
+
+                        {/* Unscratched Reward (Interactive) */}
+                        {scratchedBonus ? (
+                          <div className="p-3 bg-gradient-to-br from-green-950/40 to-slate-950 rounded-xl border border-green-500/20 flex flex-col justify-between text-left space-y-4 relative overflow-hidden animate-fade-in animate-duration-500">
+                            <span className="bg-green-500/20 text-green-400 text-[8px] font-mono px-2 py-0.5 rounded-full inline-block self-start">UNLOCKED 🎉</span>
+                            <div>
+                              <strong className="text-xs font-bold text-white block">₹150 Disbursal Fee Discount</strong>
+                              <span className="text-[9px] text-green-400 font-mono mt-0.5 block">Applied automatically next apply!</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div 
+                            onClick={() => {
+                              if (scratchingLoader) return;
+                              setScratchingLoader(true);
+                              setTimeout(() => {
+                                setScratchingLoader(false);
+                                setScratchedBonus(true);
+                                // Confetti!
+                                confetti({
+                                  particleCount: 85,
+                                  spread: 55,
+                                  origin: { y: 0.8 }
+                                });
+                              }, 1200);
+                            }}
+                            className="p-3 bg-gradient-to-br from-[#FF7A00]/25 to-[#081B4B] rounded-xl border border-[#FF7A00]/40 flex flex-col justify-center items-center text-center space-y-2 cursor-pointer hover:border-white/30 transition-all group min-h-[96px]"
+                          >
+                            {scratchingLoader ? (
+                              <RefreshCw className="w-5 h-5 text-[#FF7A00] animate-spin" />
+                            ) : (
+                              <>
+                                <Sparkles className="w-6 h-6 text-[#FF7A00] group-hover:scale-110 transition-transform" />
+                                <strong className="text-xs font-bold text-white block">Tap to Scratch</strong>
+                                <span className="text-[8px] text-zinc-400 block tracking-tight">Claim Instant Cash credits</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. REFERRAL PROGRAM BOTTOM SHEET */}
+                {activeBottomSheet === "REFERRAL" && (
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="text-lg font-black text-white">Refer & Claim Cash Credits</h4>
+                      <p className="text-xs text-[#6B7280]">Introduce DigiLend to creditworthy associates and receive ₹250 directly into your bank once verified.</p>
+                    </div>
+
+                    {/* Interactive code box */}
+                    <div className="p-4 bg-slate-950 rounded-xl border border-slate-900 flex justify-between items-center">
+                      <div className="space-y-0.5 text-left">
+                        <span className="text-[9px] text-[#6B7280] font-mono block uppercase">Your Custom Invite Code</span>
+                        <strong className="text-base font-black font-mono text-white tracking-widest">DIGILEND250</strong>
+                      </div>
+
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText("DIGILEND250");
+                          setCopiedToast(true);
+                          setTimeout(() => setCopiedToast(false), 2000);
+                        }}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                          copiedToast 
+                            ? "bg-green-500/10 border border-green-500/30 text-green-400" 
+                            : "bg-[#FF7A00] text-white hover:bg-orange-600"
+                        }`}
+                      >
+                        {copiedToast ? "Copied!" : "Copy Code"}
+                      </button>
+                    </div>
+
+                    {/* Steps tracker card */}
+                    <div className="p-4 bg-[#081B4B]/15 rounded-xl border border-slate-900 text-xs space-y-2.5 text-left">
+                      <div className="flex space-x-2.5">
+                        <span className="w-4.5 h-4.5 rounded-full bg-[#FF7A00]/20 text-[#FF7A00] text-[10px] font-bold flex items-center justify-center shrink-0">1</span>
+                        <span>Share link code with friends on WhatsApp.</span>
+                      </div>
+                      <div className="flex space-x-2.5">
+                        <span className="w-4.5 h-4.5 rounded-full bg-[#FF7A00]/20 text-[#FF7A00] text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
+                        <span>They complete DigiLocker verification in 2 minutes.</span>
+                      </div>
+                      <div className="flex space-x-2.5">
+                        <span className="w-4.5 h-4.5 rounded-full bg-[#FF7A00]/20 text-[#FF7A00] text-[10px] font-bold flex items-center justify-center shrink-0">3</span>
+                        <span>₹250 CASH settles directly into your active bank account instantly!</span>
+                      </div>
+                    </div>
+
+                    {/* Referral history logs */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-slate-500 block">Referral History Status</span>
+                      
+                      <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+                        <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-900 flex justify-between items-center text-xs">
+                          <div>
+                            <strong className="text-white font-bold block">Sanjay Rajan</strong>
+                            <span className="text-[9px] text-[#6B7280] font-mono">Registered via +91 9381XXXXXX</span>
+                          </div>
+                          <span className="text-[9.5px] font-bold text-green-400 font-mono bg-green-500/10 px-2.5 py-0.5 rounded-full">+₹250 Paid</span>
+                        </div>
+
+                        <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-900 flex justify-between items-center text-xs">
+                          <div>
+                            <strong className="text-white font-bold block">Preeti Shenoy</strong>
+                            <span className="text-[9px] text-[#6B7280] font-mono">DigiLocker KYC linked</span>
+                          </div>
+                          <span className="text-[9.5px] font-bold text-[#FF7A00] font-mono bg-[#FF7A00]/10 px-2.5 py-0.5 rounded-full">Processing</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. GENERAL DETAILED OFFERS SHEET */}
+                {activeBottomSheet === "OFFER_DETAIL" && selectedOffer && (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <h4 className="text-lg font-black text-white">{selectedOffer.title}</h4>
+                      <p className="text-xs text-zinc-300 font-medium leading-relaxed">{selectedOffer.description}</p>
+                    </div>
+
+                    <div className="p-4.5 bg-slate-950 rounded-xl border border-slate-900 space-y-3.5 text-xs text-left">
+                      <span className="text-[10px] font-mono font-black text-[#FF7A00] tracking-wider block">HOW TO PARTICIPATE & REDEEM</span>
+                      <p className="text-zinc-400 font-sans leading-normal">{selectedOffer.instruction}</p>
+                      
+                      <div className="bg-[#081B4B]/20 py-2 px-3 rounded-lg text-[10px] text-zinc-400 border border-[#081B4B]/40 inline-flex items-center space-x-1.5 align-middle">
+                        <Check className="w-3.5 h-3.5 text-[#22C55E]" />
+                        <span>Strictly Verified RBI credit campaign</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={() => setActiveBottomSheet(null)}
+                      className="w-full bg-slate-950 border border-slate-800 hover:text-white hover:border-slate-500 text-zinc-400 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      Acknowledge and Close
+                    </button>
+                  </div>
+                )}
+
+                {/* 5. DEFENSIVE CONFIRM_RESET SHEET */}
+                {activeBottomSheet === "CONFIRM_RESET" && selectedOffer && (
+                  <div className="space-y-4 text-left">
+                    <div className="space-y-2">
+                      <h4 className="text-lg font-black text-red-500">{selectedOffer.title}</h4>
+                      <p className="text-xs text-zinc-300 font-medium leading-relaxed">{selectedOffer.description}</p>
+                    </div>
+
+                    <div className="p-4 bg-red-950/20 rounded-xl border border-red-500/10 space-y-2 text-xs">
+                      <span className="text-[10px] font-mono font-black text-red-400 tracking-wider block">DESTRUCTION POLICY ACKNOWLEDGEMENT</span>
+                      <p className="text-zinc-400 font-sans leading-normal">{selectedOffer.instruction}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <button 
+                        onClick={() => setActiveBottomSheet(null)}
+                        className="bg-slate-950 border border-slate-900 hover:text-white hover:border-slate-500 text-zinc-400 text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer text-center"
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        onClick={() => {
+                          resetAllAppDemoData();
+                          setActiveBottomSheet(null);
+                        }}
+                        className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold py-3.5 rounded-xl transition-all cursor-pointer text-center"
+                      >
+                        Reset Now
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ------------------------------------------------------------- */}
+        {/* ADMIN PASSWORD CONVERSION GATEWAY */}
+        {/* ------------------------------------------------------------- */}
+        {isAdminPasswordModalOpen && (
+          <div className="absolute inset-0 z-50 bg-[#020918]/90 backdrop-blur-md flex items-center justify-center p-6">
+            <div className="w-full max-w-sm bg-slate-950 border border-[#081B4B] rounded-3xl p-6 text-center space-y-5 shadow-2xl">
+              <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center mx-auto text-amber-500 border border-amber-500/20">
+                <Lock className="w-6 h-6" />
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-black text-white tracking-tight">Admin Authentication</h3>
+                <p className="text-[11px] text-zinc-400 mt-1">Access secure banking core controls. Authentication required.</p>
+              </div>
+              
+              <div className="space-y-3 text-left">
+                <label className="text-[10px] font-mono tracking-wider uppercase text-zinc-500 block">System Access Key</label>
+                <input 
+                  type="password"
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleAdminAuth(); }}
+                  placeholder="••••••••••••"
+                  className="w-full bg-slate-900 border border-slate-800 text-white rounded-xl py-3 px-4 font-mono text-center text-xs tracking-widest focus:outline-none focus:border-amber-500"
+                  autoFocus
+                />
+                {adminPasswordError && (
+                  <span className="text-[10px] text-red-500 font-bold block text-center mt-1">{adminPasswordError}</span>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button 
+                  onClick={() => { setIsAdminPasswordModalOpen(false); setAdminPasswordError(""); setAdminPasswordInput(""); }}
+                  className="bg-slate-900 border border-slate-800 text-zinc-400 py-3 rounded-xl hover:text-white transition-all text-xs font-bold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                
+                <button 
+                  onClick={handleAdminAuth}
+                  className="bg-amber-600 hover:bg-amber-500 text-slate-950 py-3 rounded-xl transition-all text-xs font-black cursor-pointer"
+                >
+                  Unseal Core
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* FULLY FUNCTIONAL DYNAMIC ADMINISTRATIVE PANEL SCREEN */}
+        {/* ------------------------------------------------------------- */}
+        {isAdminPanelOpen && (
+          <div className="absolute inset-0 z-50 bg-[#030914] text-white flex flex-col font-sans select-text">
+            {/* Admin header */}
+            <div className="p-4 bg-slate-950 border-b border-zinc-900 flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
+                <div>
+                  <h2 className="text-xs font-black font-mono text-amber-500 uppercase tracking-widest leading-none">DigiLend Admin Portal</h2>
+                  <p className="text-[9px] text-zinc-500 font-mono mt-1">CONSOL_HOST // STABLE_SYS_2026</p>
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => { setIsAdminPanelOpen(false); setSelectedAdminUser(null); setSelectedAdminLoan(null); }}
+                className="bg-slate-900 border border-slate-800 hover:bg-red-950 hover:text-red-400 text-zinc-400 font-mono font-bold text-[10px] px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center space-x-1"
+              >
+                <LogOut className="w-3 h-3" />
+                <span>Exit Panel</span>
+              </button>
+            </div>
+
+            {/* Admin Database overview badge */}
+            <div className="bg-slate-900/40 p-2.5 border-b border-zinc-900/60 grid grid-cols-3 gap-2 text-center shrink-0">
+              <div className="bg-[#030E26]/40 p-1.5 rounded-lg border border-slate-950">
+                <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-wide block">PROFILES</span>
+                <span className="text-xs font-black text-zinc-200 font-mono">{fintechDb.users.length} Active</span>
+              </div>
+              <div className="bg-[#030E26]/40 p-1.5 rounded-lg border border-slate-950">
+                <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-wide block">LEDGER LOANS</span>
+                <span className="text-xs font-black text-zinc-200 font-mono">{fintechDb.loans.length} Records</span>
+              </div>
+              <div className="bg-[#030E26]/40 p-1.5 rounded-lg border border-slate-950">
+                <span className="text-[8px] font-mono text-zinc-500 uppercase tracking-wide block">AUDIT TRAILS</span>
+                <span className="text-xs font-black text-zinc-200 font-mono">{fintechDb.auditLogs.length} Registered</span>
+              </div>
+            </div>
+
+            {/* Navigation tabs */}
+            <div className="bg-slate-950 flex border-b border-zinc-900 text-[10px] font-mono shrink-0">
+              {[
+                { id: "settings", label: "⚙️ Global Settings" },
+                { id: "users", label: "👥 Users Profiles" },
+                { id: "loans", label: "💳 Loan Book" },
+                { id: "notifications", label: "📢 Alerts & Logs" },
+              ].map((tab) => (
+                <button 
+                  key={tab.id}
+                  onClick={() => { setAdminActiveTab(tab.id as any); setSelectedAdminUser(null); setSelectedAdminLoan(null); }}
+                  className={`flex-1 py-3 text-center border-b-2 font-bold transition-all ${
+                    adminActiveTab === tab.id 
+                      ? "border-amber-500 text-amber-500 bg-slate-900/30" 
+                      : "border-transparent text-zinc-400 hover:text-white hover:bg-slate-900/10"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Main tab context: Scrollable body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+              
+              {/* ==================== TAB 1: SYSTEM SETTINGS ==================== */}
+              {adminActiveTab === "settings" && (
+                <div className="space-y-4">
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-900 text-left space-y-3">
+                    <h4 className="text-xs font-black font-mono text-white flex items-center space-x-1 border-b border-slate-900 pb-2">
+                      <span>⚙️ MAIN APP BRANDING & RULES</span>
+                    </h4>
+                    
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-mono text-zinc-500 block">Interactive App Title Branding</label>
+                      <input 
+                        type="text"
+                        value={editedPlatformName}
+                        onChange={(e) => setEditedPlatformName(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 text-white font-black text-xs py-2.5 px-3 rounded-lg focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    {/* Logo upload picker and preview option */}
+                    <div className="space-y-2 pt-1 border-t border-slate-900">
+                      <label className="text-[10px] uppercase font-mono text-zinc-500 block">Bank Profile Logo Icon</label>
+                      
+                      <div className="flex items-center space-x-3 bg-slate-900 border border-slate-800 p-3 rounded-xl text-left">
+                        {/* Logo Preview Container */}
+                        <div className="w-12 h-12 rounded-xl bg-slate-950 border border-zinc-800 flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {editedLogoUrl ? (
+                            <img src={editedLogoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain p-1" referrerPolicy="no-referrer" />
+                          ) : (
+                            <Shield className="w-5 h-5 text-amber-500" />
+                          )}
+                        </div>
+                        
+                        <div className="flex-1 space-y-1.5">
+                          <div className="flex space-x-2">
+                            {/* File Upload Input */}
+                            <label className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold py-1.5 px-3 rounded-md cursor-pointer transition-all">
+                              Upload Logo Image
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                      if (event.target?.result) {
+                                        const img = new window.Image();
+                                        img.onload = () => {
+                                          const canvas = document.createElement("canvas");
+                                          const MAX_WIDTH = 280;
+                                          const MAX_HEIGHT = 280;
+                                          let width = img.width;
+                                          let height = img.height;
+
+                                          if (width > height) {
+                                            if (width > MAX_WIDTH) {
+                                              height = Math.round(height * (MAX_WIDTH / width));
+                                              width = MAX_WIDTH;
+                                            }
+                                          } else {
+                                            if (height > MAX_HEIGHT) {
+                                              width = Math.round(width * (MAX_HEIGHT / height));
+                                              height = MAX_HEIGHT;
+                                            }
+                                          }
+
+                                          canvas.width = width;
+                                          canvas.height = height;
+                                          const ctx = canvas.getContext("2d");
+                                          if (ctx) {
+                                            ctx.clearRect(0, 0, width, height);
+                                            ctx.drawImage(img, 0, 0, width, height);
+                                            const compressedBase64 = canvas.toDataURL("image/png");
+                                            setEditedLogoUrl(compressedBase64);
+                                          } else {
+                                            setEditedLogoUrl(event.target!.result as string);
+                                          }
+                                        };
+                                        img.src = event.target.result as string;
+                                      }
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }} 
+                              />
+                            </label>
+                            
+                            {editedLogoUrl && (
+                              <button 
+                                onClick={() => setEditedLogoUrl("")}
+                                className="bg-red-950/40 border border-red-900/30 text-red-400 hover:bg-red-900/10 text-[10px] font-mono py-1 px-2.5 rounded-md transition-all"
+                              >
+                                Clear Logo
+                              </button>
+                            )}
+                          </div>
+                          
+                          <p className="text-[9px] text-zinc-500">Supports PNG, JPG, WebP. Base64 encoded inside the core state.</p>
+                        </div>
+                      </div>
+
+                      {/* Manual Image URL Input fallback */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-zinc-600 font-mono">Or provide custom Image URL link</label>
+                        <input 
+                          type="text"
+                          value={editedLogoUrl}
+                          onChange={(e) => setEditedLogoUrl(e.target.value)}
+                          placeholder="https://example.com/logo.png"
+                          className="w-full bg-slate-900 border border-slate-800 text-zinc-300 font-mono text-[10px] py-1.5 px-3 rounded-lg focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-mono text-zinc-500 block">Flat Loan APR (%)</label>
+                        <input 
+                          type="number"
+                          step="0.1"
+                          value={editedInterestRate}
+                          onChange={(e) => setEditedInterestRate(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 text-white font-mono text-xs py-2 px-2.5 rounded-lg"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-mono text-zinc-500 block">Processing Charge (%)</label>
+                        <input 
+                          type="number"
+                          value={editedProcessingFee}
+                          onChange={(e) => setEditedProcessingFee(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 text-white font-mono text-xs py-2 px-2.5 rounded-lg"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-mono text-zinc-500 block">GST on Fee (%)</label>
+                        <input 
+                          type="number"
+                          value={editedGst}
+                          onChange={(e) => setEditedGst(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 text-white font-mono text-xs py-2 px-2.5 rounded-lg"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-mono text-zinc-500 block">Food cashback (%)</label>
+                        <input 
+                          type="number"
+                          value={editedCashback}
+                          onChange={(e) => setEditedCashback(Number(e.target.value))}
+                          className="w-full bg-slate-900 border border-slate-800 text-white font-mono text-xs py-2 px-2.5 rounded-lg"
+                        />
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={updateAdminSettingsOnServer}
+                      className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-xs py-3 rounded-xl transition-all mt-4 cursor-pointer"
+                    >
+                      Apply Updates Dynamically
+                    </button>
+                  </div>
+
+                  <div className="bg-amber-950/20 rounded-2xl p-4 border border-amber-500/10 text-left space-y-1.5">
+                    <span className="text-[10px] font-mono text-amber-500 font-bold block uppercase tracking-wider">⚡ LIVE HOT PROPAGATION RULES</span>
+                    <p className="text-[11px] text-zinc-400 font-sans leading-relaxed">
+                      When you alter these, all math widgets (Eligibility Stepper, EMI Calculator, backend underwriting engine, disbursal sheets) adjust calculations immediately across the active frontend simulator and backend nodes.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ==================== TAB 2: MANAGE PROFILES ==================== */}
+              {adminActiveTab === "users" && (
+                <div className="space-y-4">
+                  {!selectedAdminUser ? (
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider text-left">SELECT SIMULATOR PROFILE TO MANAGE</h4>
+                      <div className="space-y-2">
+                        {fintechDb.users.map((u) => (
+                          <div 
+                            key={u.id}
+                            onClick={() => setSelectedAdminUser({ ...u, kycStatus: u.kyc.status, bankVerified: u.bank.isVerified, bankName: u.bank.bankName, bankAccount: u.bank.accountNumber, bankIfsc: u.bank.ifscCode })}
+                            className="p-3 bg-slate-950 border border-slate-900 hover:border-amber-500/40 rounded-xl transition-all cursor-pointer text-left flex justify-between items-center"
+                          >
+                            <div className="space-y-1">
+                              <strong className="text-white text-xs block">{u.fullName}</strong>
+                              <span className="text-[10px] text-zinc-500 font-mono block">{u.phone} • {u.occupation}</span>
+                              <div className="flex space-x-2 pt-1 font-mono text-[9px]">
+                                <span className={`px-1.5 py-0.5 rounded ${u.kyc.status === "VERIFIED" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
+                                  KYC: {u.kyc.status}
+                                </span>
+                                <span className="text-zinc-600">Score: {u.creditScore}</span>
+                                <span className="text-zinc-600">Limit: ₹{u.maxEligibleAmount}</span>
+                              </div>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-zinc-500" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-900 text-left space-y-3.5">
+                      <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                        <strong className="text-xs font-black font-mono text-amber-500 uppercase">👤 EDIT PARAMS: {selectedAdminUser.fullName}</strong>
+                        <button 
+                          onClick={() => setSelectedAdminUser(null)}
+                          className="text-[10px] text-zinc-500 font-mono hover:text-white"
+                        >
+                          Back to List
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Full Name</label>
+                          <input 
+                            type="text"
+                            value={selectedAdminUser.fullName}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, fullName: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-semibold focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Phone</label>
+                          <input 
+                            type="text"
+                            value={selectedAdminUser.phone}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, phone: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">CIBIL Score (300 - 900)</label>
+                          <input 
+                            type="number"
+                            value={selectedAdminUser.creditScore}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, creditScore: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono font-black"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Approved Limit (₹)</label>
+                          <input 
+                            type="number"
+                            value={selectedAdminUser.maxEligibleAmount}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, maxEligibleAmount: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono font-black"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">KYC Status</label>
+                          <select 
+                            value={selectedAdminUser.kycStatus}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, kycStatus: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs"
+                          >
+                            <option value="PENDING">PENDING (Restart Funnel)</option>
+                            <option value="VERIFIED">VERIFIED (Checked)</option>
+                            <option value="REJECTED">REJECTED (Hard Reject)</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Bank Link Verification</label>
+                          <select 
+                            value={selectedAdminUser.bankVerified ? "true" : "false"}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, bankVerified: e.target.value === "true" })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs"
+                          >
+                            <option value="true">VERIFIED // PASS</option>
+                            <option value="false">NOT VERIFIED // FAIL</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] uppercase font-mono text-zinc-500 block">Registered Bank Name</label>
+                        <input 
+                          type="text"
+                          value={selectedAdminUser.bankName || ""}
+                          onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, bankName: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Bank Account No.</label>
+                          <input 
+                            type="text"
+                            value={selectedAdminUser.bankAccount || ""}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, bankAccount: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">IFSC Code</label>
+                          <input 
+                            type="text"
+                            value={selectedAdminUser.bankIfsc || ""}
+                            onChange={(e) => setSelectedAdminUser({ ...selectedAdminUser, bankIfsc: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-3">
+                        <button 
+                          onClick={() => deleteAdminDataOnServer("USER", selectedAdminUser.id)}
+                          className="bg-red-950 hover:bg-red-900 text-red-400 font-bold border border-red-900/30 text-xs py-2.5 rounded-xl cursor-pointer"
+                        >
+                          Delete Profile
+                        </button>
+                        <button 
+                          onClick={() => updateAdminUserOnServer(selectedAdminUser)}
+                          className="bg-green-600 hover:bg-green-500 text-slate-950 font-black text-xs py-2.5 rounded-xl cursor-pointer"
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ==================== TAB 3: MANAGE LOANS ==================== */}
+              {adminActiveTab === "loans" && (
+                <div className="space-y-4 text-left">
+                  {!selectedAdminLoan ? (
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider">MANAGE LEDGER LOAN RECORDS</h4>
+                      
+                      {fintechDb.loans.length === 0 ? (
+                        <div className="p-8 bg-slate-950 rounded-2xl border border-slate-900 text-center text-zinc-500">
+                          No loan applications registered in database ledger yet.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {fintechDb.loans.map((l) => {
+                            const assocUser = fintechDb.users.find(u => u.id === l.userId);
+                            return (
+                              <div 
+                                key={l.id}
+                                onClick={() => setSelectedAdminLoan({ ...l })}
+                                className="p-3 bg-slate-950 border border-slate-900 hover:border-amber-500/40 rounded-xl transition-all cursor-pointer flex justify-between items-center"
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono font-bold text-[10px] text-zinc-400">{l.id}</span>
+                                    <span className={`text-[8.5px] font-mono uppercase px-1.5 py-0.5 rounded font-black ${
+                                      l.status === "DISBURSED" 
+                                        ? "bg-green-500/15 text-green-400" 
+                                        : l.status === "OVERDUE" 
+                                        ? "bg-red-500/15 text-red-400 font-bold" 
+                                        : "bg-blue-500/15 text-blue-400"
+                                    }`}>
+                                      {l.status}
+                                    </span>
+                                  </div>
+                                  <strong className="text-white text-xs block font-mono">₹{l.amount.toLocaleString()} ({l.tenureDays} Days)</strong>
+                                  <span className="text-[9.5px] text-zinc-500 block font-sans">
+                                    User: {assocUser ? assocUser.fullName : "Unknown ID"} • Due: {l.dueDate}
+                                  </span>
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-zinc-500" />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-900 space-y-3.5">
+                      <div className="flex justify-between items-center border-b border-slate-900 pb-2">
+                        <strong className="text-xs font-black font-mono text-amber-500 uppercase">💳 MANAGE LOAN ID: {selectedAdminLoan.id}</strong>
+                        <button 
+                          onClick={() => setSelectedAdminLoan(null)}
+                          className="text-[10px] text-zinc-500 font-mono hover:text-white"
+                        >
+                          Back to List
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Loan Amount (₹)</label>
+                          <input 
+                            type="number"
+                            value={selectedAdminLoan.amount}
+                            onChange={(e) => setSelectedAdminLoan({ ...selectedAdminLoan, amount: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Repay Tenure (Days)</label>
+                          <input 
+                            type="number"
+                            value={selectedAdminLoan.tenureDays}
+                            onChange={(e) => setSelectedAdminLoan({ ...selectedAdminLoan, tenureDays: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Outstanding Due (₹)</label>
+                          <input 
+                            type="number"
+                            value={selectedAdminLoan.outstandingBalance}
+                            onChange={(e) => setSelectedAdminLoan({ ...selectedAdminLoan, outstandingBalance: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1.5 px-2.5 text-xs font-mono font-semibold"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] uppercase font-mono text-zinc-500 block">Due Date (YYYY-MM-DD)</label>
+                          <input 
+                            type="text"
+                            value={selectedAdminLoan.dueDate}
+                            onChange={(e) => setSelectedAdminLoan({ ...selectedAdminLoan, dueDate: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 text-white font-mono rounded-lg py-1.5 px-2.5 text-xs"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] uppercase font-mono text-zinc-500 block font-bold">Override Loan Status</label>
+                        <select 
+                          value={selectedAdminLoan.status}
+                          onChange={(e) => setSelectedAdminLoan({ ...selectedAdminLoan, status: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-2 px-3 text-xs font-semibold"
+                        >
+                          <option value="APPLIED">APPLIED (Review Stage)</option>
+                          <option value="APPROVED">APPROVED (Awaiting eSign)</option>
+                          <option value="DISBURSED">DISBURSED (Active Ledger / Outstanding)</option>
+                          <option value="REPAID">REPAID (Cleared Balance / Closed)</option>
+                          <option value="CLOSED">CLOSED (Complete archive)</option>
+                          <option value="OVERDUE">OVERDUE (In default flag)</option>
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-3">
+                        <button 
+                          onClick={() => deleteAdminDataOnServer("LOAN", selectedAdminLoan.id)}
+                          className="bg-red-950 hover:bg-red-900 text-red-400 font-bold border border-red-900/30 text-xs py-2.5 rounded-xl cursor-pointer"
+                        >
+                          Delete Loan
+                        </button>
+                        <button 
+                          onClick={() => updateAdminLoanOnServer(selectedAdminLoan)}
+                          className="bg-green-600 hover:bg-green-500 text-slate-950 font-black text-xs py-2.5 rounded-xl cursor-pointer"
+                        >
+                          Save Changes
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ==================== TAB 4: BROADCASTS & AUDITS ==================== */}
+              {adminActiveTab === "notifications" && (
+                <div className="space-y-4 text-left">
+                  {/* Notification Broadcaster */}
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-900 space-y-3">
+                    <h4 className="text-xs font-black font-mono text-white flex items-center space-x-1 uppercase border-b border-slate-900 pb-2">
+                      <span>📢 BROADCAST TARGETED ALERTS</span>
+                    </h4>
+                    
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-mono text-zinc-500 block">Alert Badge Type</label>
+                      <div className="flex space-x-2">
+                        {(["INFO", "SUCCESS", "WARNING", "CRITICAL"] as const).map((t) => (
+                          <button 
+                            key={t}
+                            onClick={() => setNotifType(t)}
+                            className={`text-[9px] font-mono font-bold flex-1 py-1 rounded border capitalize ${
+                              notifType === t 
+                                ? "bg-amber-500/10 text-amber-400 border-amber-500" 
+                                : "bg-slate-900 text-zinc-500 border-slate-800 hover:bg-slate-900"
+                            }`}
+                          >
+                            {t.toLowerCase()}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-mono text-zinc-500 block">Notification Header Title</label>
+                      <input 
+                        type="text"
+                        value={notifTitle}
+                        onChange={(e) => setNotifTitle(e.target.value)}
+                        placeholder="e.g., Credit Limit Surge Alert"
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg py-1.5 px-3 text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-mono text-zinc-500 block">Payload Message Text</label>
+                      <textarea 
+                        value={notifMessage}
+                        onChange={(e) => setNotifMessage(e.target.value)}
+                        placeholder="Detailed notification content seen in upper bell drawer..."
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg py-1.5 px-3 text-xs h-16 resize-none"
+                      />
+                    </div>
+
+                    <button 
+                      onClick={pushAdminNotification}
+                      className="w-full bg-amber-600 hover:bg-amber-500 text-slate-950 font-black text-xs py-3 rounded-xl transition-all cursor-pointer"
+                    >
+                      Inject Notification Immediately
+                    </button>
+                  </div>
+
+                  {/* Audit Logs writer */}
+                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-900 space-y-3">
+                    <h4 className="text-xs font-black font-mono text-white flex items-center space-x-1 uppercase border-b border-slate-900 pb-2">
+                      <span>🛡️ RECORD SYSTEM AUDIT LEDGER LOG</span>
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-mono text-zinc-500 block">System Category</label>
+                        <select 
+                          value={auditCategory}
+                          onChange={(e) => setAuditCategory(e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1 px-2 text-[10px]"
+                        >
+                          <option value="SERVICE">SERVICE (Default)</option>
+                          <option value="SECURITY">SECURITY (Breach/Override)</option>
+                          <option value="RISK">RISK (Underwriting)</option>
+                          <option value="DISBURSEMENT">DISBURSEMENT (Banking)</option>
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-mono text-zinc-500 block">Log Level Severity</label>
+                        <select 
+                          value={auditLevel}
+                          onChange={(e) => setAuditLevel(e.target.value as any)}
+                          className="w-full bg-slate-900 border border-slate-800 text-white rounded-lg py-1 px-2 text-[10px]"
+                        >
+                          <option value="INFO">INFO</option>
+                          <option value="WARNING">WARNING</option>
+                          <option value="CRITICAL">SEVERE CRITICAL</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-mono text-zinc-500 block font-bold">Log Record Statement</label>
+                      <input 
+                        type="text"
+                        value={auditMsg}
+                        onChange={(e) => setAuditMsg(e.target.value)}
+                        placeholder="e.g., Compliance audit unsealed by banking executive"
+                        className="w-full bg-slate-950 border border-slate-800 text-white rounded-lg py-2 px-3 text-xs"
+                      />
+                    </div>
+
+                    <button 
+                      onClick={injectAdminAuditLog}
+                      className="w-full bg-slate-800 hover:bg-slate-700 text-amber-500 font-bold text-xs py-2.5 rounded-xl cursor-pointer"
+                    >
+                      Insert Audit Log Entry
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+
+        {/* Invisible/Subtle Lock bottom tab trigger bar */}
+        <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center">
+          <button 
+            onClick={() => setIsAdminPasswordModalOpen(true)}
+            className="w-24 h-5 bg-transparent outline-none cursor-pointer flex items-center justify-center group"
+            title="Admin Center Key"
+            id="hidden-lock-admin-trigger"
+          >
+            <div className="opacity-[0.02] hover:opacity-100 transition-opacity bg-slate-950/85 px-3 py-1 rounded-full border border-slate-800 flex items-center space-x-1 text-zinc-500 select-none">
+              <Lock className="w-2.5 h-2.5 text-amber-500" />
+              <span className="text-[8px] font-mono select-none">Unseal Key</span>
+            </div>
+          </button>
         </div>
 
       </div>

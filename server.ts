@@ -9,7 +9,8 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Initialize Gemini SDK if API Key is available
 const apiKey = process.env.GEMINI_API_KEY;
@@ -131,6 +132,15 @@ interface AuditLog {
 
 // Initial Mock Seed Data
 const database = {
+  settings: {
+    interestRate: 2.5,
+    processingFeePercent: 3,
+    gstPercent: 18,
+    platformName: "DigiLend",
+    swiggyCashbackPercent: 25,
+    zeroCostTenureMonths: [3, 6, 9],
+    logoUrl: "",
+  },
   users: [
     {
       id: "usr-01",
@@ -487,9 +497,9 @@ app.post("/api/loans/apply", (req, res) => {
   const tenure = Number(tenureDays);
   
   // Calculate standard banking parameters
-  const interestRate = 2.5; // 2.5% flat monthly interest
-  const processingFee = Math.round(loanAmount * 0.03); // 3%
-  const gst = Math.round(processingFee * 0.18); // 18% GST on processing fee
+  const interestRate = database.settings.interestRate;
+  const processingFee = Math.round(loanAmount * (database.settings.processingFeePercent / 100));
+  const gst = Math.round(processingFee * (database.settings.gstPercent / 100));
   const netDisbursal = loanAmount - processingFee - gst;
   const repaymentAmount = Math.round(loanAmount * (1 + (interestRate * (tenure / 30)) / 100));
   
@@ -826,6 +836,119 @@ Assistant: Keep the reply within 2-3 concise sentences. Help the user with their
     console.error("Gemini support crashed: ", error);
     res.status(500).json({ error: error.message });
   }
+});
+
+
+// ==========================================
+// ADMIN DASHBOARD REST MANAGEMENT API
+// ==========================================
+
+// 1. Update Core App Settings
+app.post("/api/admin/settings/update", (req, res) => {
+  const { interestRate, processingFeePercent, gstPercent, platformName, swiggyCashbackPercent, zeroCostTenureMonths, logoUrl } = req.body;
+  
+  database.settings.interestRate = interestRate !== undefined ? Number(interestRate) : database.settings.interestRate;
+  database.settings.processingFeePercent = processingFeePercent !== undefined ? Number(processingFeePercent) : database.settings.processingFeePercent;
+  database.settings.gstPercent = gstPercent !== undefined ? Number(gstPercent) : database.settings.gstPercent;
+  database.settings.platformName = platformName !== undefined ? platformName : database.settings.platformName;
+  database.settings.swiggyCashbackPercent = swiggyCashbackPercent !== undefined ? Number(swiggyCashbackPercent) : database.settings.swiggyCashbackPercent;
+  database.settings.zeroCostTenureMonths = Array.isArray(zeroCostTenureMonths) ? zeroCostTenureMonths : database.settings.zeroCostTenureMonths;
+  if (logoUrl !== undefined) {
+    database.settings.logoUrl = logoUrl;
+  }
+  
+  addAuditLog("SECURITY", "WARNING", `Admin override global settings. PlatformName: ${database.settings.platformName}, Interest: ${database.settings.interestRate}%`);
+  res.json({ success: true, settings: database.settings });
+});
+
+// 2. Add or Update User Info
+app.post("/api/admin/users/update", (req, res) => {
+  const { id, fullName, phone, monthlyIncome, creditScore, maxEligibleAmount, dob, gender, kycStatus, bankVerified, bankName, bankAccount, bankIfsc } = req.body;
+  const user = database.users.find(u => u.id === id);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  
+  user.fullName = fullName || user.fullName;
+  user.phone = phone || user.phone;
+  user.dob = dob || user.dob;
+  user.gender = gender || user.gender;
+  user.monthlyIncome = monthlyIncome !== undefined ? Number(monthlyIncome) : user.monthlyIncome;
+  user.creditScore = creditScore !== undefined ? Number(creditScore) : user.creditScore;
+  user.maxEligibleAmount = maxEligibleAmount !== undefined ? Number(maxEligibleAmount) : user.maxEligibleAmount;
+  
+  if (kycStatus) {
+    user.kyc.status = kycStatus;
+    if (kycStatus === "VERIFIED") {
+      user.kyc.digilockerVerified = true;
+    }
+  }
+  
+  if (bankVerified !== undefined) {
+    user.bank.isVerified = bankVerified;
+  }
+  if (bankName) user.bank.bankName = bankName;
+  if (bankAccount) user.bank.accountNumber = bankAccount;
+  if (bankIfsc) user.bank.ifscCode = bankIfsc;
+  
+  addAuditLog("SECURITY", "WARNING", `Admin override user parameters for user: ${user.fullName}`);
+  res.json({ success: true, user });
+});
+
+// 3. Update Loan Info (e.g., status, balance, dues)
+app.post("/api/admin/loans/update", (req, res) => {
+  const { id, amount, status, tenureDays, netDisbursal, repaymentAmount, outstandingBalance, dueDate } = req.body;
+  const loan = database.loans.find(l => l.id === id);
+  if (!loan) return res.status(404).json({ error: "Loan not found" });
+  
+  loan.amount = amount !== undefined ? Number(amount) : loan.amount;
+  loan.status = status || loan.status;
+  loan.tenureDays = tenureDays !== undefined ? Number(tenureDays) : loan.tenureDays;
+  loan.netDisbursal = netDisbursal !== undefined ? Number(netDisbursal) : loan.netDisbursal;
+  loan.repaymentAmount = repaymentAmount !== undefined ? Number(repaymentAmount) : loan.repaymentAmount;
+  loan.outstandingBalance = outstandingBalance !== undefined ? Number(outstandingBalance) : loan.outstandingBalance;
+  loan.dueDate = dueDate || loan.dueDate;
+  
+  if (loan.status === "REPAID") {
+    loan.outstandingBalance = 0;
+  }
+  
+  addAuditLog("SECURITY", "WARNING", `Admin manually modified loan ${id} fields`);
+  res.json({ success: true, loan });
+});
+
+// 4. Force Delete User or Loan
+app.post("/api/admin/data/delete", (req, res) => {
+  const { type, id } = req.body;
+  if (type === "USER") {
+    database.users = database.users.filter(u => u.id !== id);
+    addAuditLog("SECURITY", "CRITICAL", `Admin DELETED user record ${id}`);
+  } else if (type === "LOAN") {
+    database.loans = database.loans.filter(l => l.id !== id);
+    addAuditLog("SECURITY", "CRITICAL", `Admin DELETED loan record ${id}`);
+  }
+  res.json({ success: true });
+});
+
+// 5. Add Custom Audit log
+app.post("/api/admin/audit/add", (req, res) => {
+  const { category, level, message } = req.body;
+  addAuditLog(category, level, message);
+  res.json({ success: true });
+});
+
+// 6. Push custom Notification
+app.post("/api/admin/notification/push", (req, res) => {
+  const { userId, title, message, type } = req.body;
+  const newNotif = {
+    id: `not-${Date.now()}`,
+    userId,
+    title,
+    message,
+    type: type || "INFO",
+    isRead: false,
+    createdAt: new Date().toISOString()
+  };
+  database.notifications.push(newNotif);
+  res.json({ success: true, notification: newNotif });
 });
 
 
