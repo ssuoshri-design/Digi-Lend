@@ -1,0 +1,6 @@
+{
+  "name": "DigiLend",
+  "description": "Prinstine digital lending application for instant, paperless personal loans in India with bank-grade security, online KYC, and live chat support.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
