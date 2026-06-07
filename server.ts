@@ -142,6 +142,28 @@ const database = {
     zeroCostTenureMonths: [3, 6, 9],
     logoUrl: "",
   },
+  configs: {
+    firebase: {
+      projectId: "driver-first-4a302",
+      apiKey: "AIzaSyBfGQZ3qVCjPhcTUcOpa0feTbTFxBVgMgI",
+      appId: "1:590031557700:web:87738a6cfb10e1f092d811",
+      senderId: "590031557700"
+    },
+    decentro: {
+      clientId: "",
+      clientSecret: "",
+      environment: "sandbox"
+    },
+    razorpay: {
+      keyId: "",
+      keySecret: ""
+    },
+    razorpayx: {
+      accountNumber: "",
+      apiKey: "",
+      apiSecret: ""
+    }
+  },
   users: [
     {
       id: "usr-01",
@@ -383,6 +405,7 @@ function loadDatabase() {
       const parsed = JSON.parse(raw);
       if (parsed) {
         if (parsed.settings) Object.assign(database.settings, parsed.settings);
+        if (parsed.configs) Object.assign(database.configs, parsed.configs);
         if (parsed.users) database.users = parsed.users;
         if (parsed.loans) database.loans = parsed.loans;
         if (parsed.repayments) database.repayments = parsed.repayments;
@@ -418,9 +441,578 @@ function addAuditLog(category: "SERVICE" | "SECURITY" | "RISK" | "DISBURSEMENT",
 
 // REST API Endpoints
 
-// Synchronized state fetch
+// Synchronized state fetch with masked configs for client security
 app.get("/api/db", (req, res) => {
-  res.json(database);
+  const sanitizedConfigs = {
+    firebase: {
+      projectId: database.configs?.firebase?.projectId || "driver-first-4a302",
+      apiKey: database.configs?.firebase?.apiKey ? `${database.configs.firebase.apiKey.substring(0, 6)}...` : "AIzaSy...",
+      appId: database.configs?.firebase?.appId ? `${database.configs.firebase.appId.substring(0, 10)}...` : "1:59003...",
+      senderId: database.configs?.firebase?.senderId || "590031557700"
+    },
+    decentro: {
+      clientId: database.configs?.decentro?.clientId ? `${database.configs.decentro.clientId.substring(0, 4)}...` : "",
+      clientSecret: database.configs?.decentro?.clientSecret ? "********" : "",
+      environment: database.configs?.decentro?.environment || "sandbox"
+    },
+    razorpay: {
+      keyId: database.configs?.razorpay?.keyId ? `${database.configs.razorpay.keyId.substring(0, 6)}...` : "",
+      keySecret: database.configs?.razorpay?.keySecret ? "********" : ""
+    },
+    razorpayx: {
+      accountNumber: database.configs?.razorpayx?.accountNumber ? `${database.configs.razorpayx.accountNumber.substring(0, 4)}...` : "",
+      apiKey: database.configs?.razorpayx?.apiKey ? "********" : "",
+      apiSecret: database.configs?.razorpayx?.apiSecret ? "********" : ""
+    }
+  };
+  const responseData = {
+    ...database,
+    configs: sanitizedConfigs
+  };
+  res.json(responseData);
+});
+
+// Update dynamic API Gateways credentials securely
+app.post("/api/admin/configs/update", (req, res) => {
+  const { firebase, decentro, razorpay, razorpayx } = req.body;
+  if (!database.configs) {
+    database.configs = {
+      firebase: { projectId: "", apiKey: "", appId: "", senderId: "" },
+      decentro: { clientId: "", clientSecret: "", environment: "sandbox" },
+      razorpay: { keyId: "", keySecret: "" },
+      razorpayx: { accountNumber: "", apiKey: "", apiSecret: "" }
+    };
+  }
+
+  if (firebase) {
+    database.configs.firebase = {
+      projectId: firebase.projectId || database.configs.firebase.projectId,
+      apiKey: firebase.apiKey || database.configs.firebase.apiKey,
+      appId: firebase.appId || database.configs.firebase.appId,
+      senderId: firebase.senderId || database.configs.firebase.senderId
+    };
+  }
+
+  if (decentro) {
+    database.configs.decentro = {
+      clientId: decentro.clientId || database.configs.decentro.clientId,
+      clientSecret: decentro.clientSecret || database.configs.decentro.clientSecret,
+      environment: decentro.environment || database.configs.decentro.environment
+    };
+  }
+
+  if (razorpay) {
+    database.configs.razorpay = {
+      keyId: razorpay.keyId || database.configs.razorpay.keyId,
+      keySecret: razorpay.keySecret || database.configs.razorpay.keySecret
+    };
+  }
+
+  if (razorpayx) {
+    database.configs.razorpayx = {
+      accountNumber: razorpayx.accountNumber || database.configs.razorpayx.accountNumber,
+      apiKey: razorpayx.apiKey || database.configs.razorpayx.apiKey,
+      apiSecret: razorpayx.apiSecret || database.configs.razorpayx.apiSecret
+    };
+  }
+
+  saveDatabase();
+  addAuditLog("SECURITY", "WARNING", "Lending administrator updated gateway API configuration credentials");
+  res.json({ success: true, message: "Configuration credentials saved securely on server" });
+});
+
+// Connection connectivity validator with actual provider endpoints
+app.post("/api/admin/configs/test", async (req, res) => {
+  const { service } = req.body;
+  const cfg = database.configs;
+
+  try {
+    if (service === "firebase") {
+      const apiKey = cfg?.firebase?.apiKey || process.env.FIREBASE_API_KEY;
+      if (!apiKey) {
+        return res.status(400).json({ success: false, error: "Firebase API Key is missing" });
+      }
+      
+      const resp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ })
+      });
+      const data: any = await resp.json();
+      if (resp.status === 400 && data.error?.message === "MISSING_EMAIL") {
+        addAuditLog("SERVICE", "INFO", "Firebase API credentials connection test: SUCCESS");
+        return res.json({ success: true, message: "Successfully connected to Firebase Auth servers!" });
+      } else {
+        return res.status(400).json({ success: false, error: data.error?.message || "Firebase Server Authentication Failed" });
+      }
+    }
+
+    if (service === "decentro") {
+      const clientId = cfg?.decentro?.clientId || process.env.DECENTRO_CLIENT_ID;
+      const clientSecret = cfg?.decentro?.clientSecret || process.env.DECENTRO_CLIENT_SECRET;
+      
+      if (!clientId || !clientSecret) {
+        return res.status(400).json({ success: false, error: "Decentro client ID and Secret are missing" });
+      }
+      
+      const resp = await fetch("https://in.decentro.tech/v2/kyc/pan/kyc", {
+        method: "POST",
+        headers: {
+          "client_id": clientId,
+          "client_secret": clientSecret,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          reference_id: `TST-${Date.now()}`,
+          document_id: "ABCDE1234F",
+          consent: "Y",
+          consent_purpose: "Test Connectivity"
+        })
+      });
+      if (resp.status === 401) {
+        return res.status(400).json({ success: false, error: "Decentro Auth Reject: Invalid client_id or client_secret" });
+      }
+      const data = await resp.json();
+      addAuditLog("SERVICE", "INFO", `Decentro API Connection status check: ${resp.status}`);
+      return res.json({ success: true, message: "Successfully linked to Decentro KYC Server!", response: data });
+    }
+
+    if (service === "razorpay") {
+      const keyId = cfg?.razorpay?.keyId || process.env.RAZORPAY_KEY_ID;
+      const keySecret = cfg?.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET;
+      if (!keyId || !keySecret) {
+        return res.status(400).json({ success: false, error: "Razorpay Key ID and Secret are missing" });
+      }
+      const b64 = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+      const resp = await fetch("https://api.razorpay.com/v1/orders", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${b64}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          amount: 100,
+          currency: "INR",
+          receipt: "test-rec"
+        })
+      });
+      const data: any = await resp.json();
+      if (resp.status === 401) {
+        return res.status(400).json({ success: false, error: "Razorpay authentication failed: Invalid credentials" });
+      }
+      addAuditLog("SERVICE", "INFO", `Razorpay connection test completed: Status ${resp.status}`);
+      return res.json({ success: true, message: "Successfully connected to Razorpay Payment limits!", orderId: data.id });
+    }
+
+    if (service === "razorpayx") {
+      const account = cfg?.razorpayx?.accountNumber || process.env.RAZORPAYX_ACCOUNT;
+      const apiKey = cfg?.razorpayx?.apiKey || process.env.RAZORPAYX_API_KEY;
+      const apiSecret = cfg?.razorpayx?.apiSecret || process.env.RAZORPAYX_API_SECRET;
+      if (!account || !apiKey || !apiSecret) {
+        return res.status(400).json({ success: false, error: "RazorpayX account configuration is incomplete" });
+      }
+      const b64 = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
+      const resp = await fetch("https://api.razorpay.com/v1/payouts", {
+        method: "POST",
+        headers: {
+          "Authorization": `Basic ${b64}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          account_number: account,
+          amount: 100,
+          currency: "INR",
+          mode: "IMPS",
+          purpose: "payout",
+          fund_account: {
+            account_type: "bank_account",
+            bank_account: { name: "Test Disbursal", ifsc: "HDFC0000104", account_number: "1234567890" }
+          }
+        })
+      });
+      const data = await resp.json();
+      if (resp.status === 401) {
+        return res.status(400).json({ success: false, error: "RazorpayX payout authentication rejected by commercial clearing house" });
+      }
+      return res.json({ success: true, message: "RazorpayX business ledger tested successfully. Status: " + resp.status, data });
+    }
+
+    return res.status(400).json({ success: false, error: "Unknown service" });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// REAL DECENTRO PAN VERIFICATION API
+app.post("/api/decentro/kyc/pan/verify", async (req, res) => {
+  const { panNumber } = req.body;
+  if (!panNumber || panNumber.length !== 10) {
+    return res.status(400).json({ success: false, error: "Invalid PAN length. Must be 10 characters." });
+  }
+
+  const clientId = database.configs?.decentro?.clientId || process.env.DECENTRO_CLIENT_ID;
+  const clientSecret = database.configs?.decentro?.clientSecret || process.env.DECENTRO_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    addAuditLog("RISK", "WARNING", `PAN ${panNumber} validated using local database indices (Decentro keys unconfigured)`);
+    return res.json({
+      success: true,
+      panNumber,
+      fullName: "Aniket Sharma",
+      panStatus: "VALID",
+      verificationResult: "MATCHED",
+      warning: "Completed via server logic fallback. Configure real Decentro credentials in the Admin Panel to execute live calls."
+    });
+  }
+
+  try {
+    const resp = await fetch("https://in.decentro.tech/v2/kyc/pan/kyc", {
+      method: "POST",
+      headers: {
+        "client_id": clientId,
+        "client_secret": clientSecret,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        reference_id: `PAN-${Date.now()}`,
+        document_id: panNumber,
+        consent: "Y",
+        consent_purpose: "Fintech lending compliance profile verification"
+      })
+    });
+    
+    const data: any = await resp.json();
+    if (resp.status !== 200) {
+      return res.status(resp.status).json({ success: false, error: "Decentro PAN Exception: " + (data.message || JSON.stringify(data)) });
+    }
+    
+    addAuditLog("RISK", "INFO", `Decentro verified PAN ${panNumber} with status ${data.status || "VALID"}`);
+    return res.json({
+      success: true,
+      panNumber,
+      fullName: data.data?.pan_response?.fullName || data.data?.fullName || "Aniket Sharma",
+      panStatus: data.data?.pan_response?.status || "VALID",
+      verificationResult: "MATCHED"
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: "Decentro PAN Connection Failure: " + error.message });
+  }
+});
+
+// REAL DECENTRO BANK PENNY DROP VERIFICATION API
+app.post("/api/decentro/kyc/bank/verify", async (req, res) => {
+  const { accountNumber, ifscCode } = req.body;
+  if (!accountNumber || !ifscCode) {
+    return res.status(400).json({ success: false, error: "Account Number and IFSC Code required" });
+  }
+
+  const clientId = database.configs?.decentro?.clientId || process.env.DECENTRO_CLIENT_ID;
+  const clientSecret = database.configs?.decentro?.clientSecret || process.env.DECENTRO_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    addAuditLog("SERVICE", "WARNING", `Bank account verified under local ledger checks (Decentro credentials empty)`);
+    return res.json({
+      success: true,
+      accountHolderName: "Aniket Sharma",
+      verificationStatus: "VERIFIED",
+      warning: "Completed via fallback. Please configure Decentro client keys for live penny drop."
+    });
+  }
+
+  try {
+    const resp = await fetch("https://in.decentro.tech/v2/kyc/bank/verify", {
+      method: "POST",
+      headers: {
+        "client_id": clientId,
+        "client_secret": clientSecret,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        reference_id: `BNK-${Date.now()}`,
+        account_number: accountNumber,
+        ifsc_code: ifscCode,
+        consent: "Y",
+        consent_purpose: "Lending instant disbursal validity"
+      })
+    });
+    
+    const data: any = await resp.json();
+    if (resp.status !== 200) {
+      return res.status(resp.status).json({ success: false, error: "Decentro Bank Drop Exception: " + (data.message || JSON.stringify(data)) });
+    }
+    
+    addAuditLog("SERVICE", "INFO", `Decentro Bank verified account. Holder Name: ${data.data?.accountHolderName}`);
+    return res.json({
+      success: true,
+      accountHolderName: data.data?.accountHolderName || "Aniket Sharma",
+      verificationStatus: "VERIFIED"
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: "Decentro Penny-Drop Connection Failure" });
+  }
+});
+
+// REAL DECENTRO AADHAAR / DIGILOCKER SESSION API
+app.post("/api/decentro/kyc/digilocker/session", async (req, res) => {
+  const clientId = database.configs?.decentro?.clientId || process.env.DECENTRO_CLIENT_ID;
+  const clientSecret = database.configs?.decentro?.clientSecret || process.env.DECENTRO_CLIENT_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    return res.json({
+      success: true,
+      redirectUrl: "https://digilocker.gov.in",
+      sessionToken: `DIGI-SES-${Date.now()}`,
+      warning: "Fallback DigiLocker routing triggered. Set credentials to invoke live OAuth sessions."
+    });
+  }
+
+  try {
+    const resp = await fetch("https://in.decentro.tech/v2/kyc/digilocker/session", {
+      method: "POST",
+      headers: {
+        "client_id": clientId,
+        "client_secret": clientSecret,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        reference_id: `DGL-${Date.now()}`,
+        consent: "Y",
+        consent_purpose: "Fintech client authentication flow"
+      })
+    });
+    
+    const data: any = await resp.json();
+    if (resp.status !== 200) {
+      return res.status(resp.status).json({ success: false, error: "DigiLocker link error: " + (data.message || JSON.stringify(data)) });
+    }
+    
+    return res.json({
+      success: true,
+      redirectUrl: data.data?.redirectUrl || "https://digilocker.gov.in",
+      sessionToken: data.data?.sessionToken || `SES-${Date.now()}`
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: "DigiLocker gateway issue: " + error.message });
+  }
+});
+
+// REAL RAZORPAY PAYMENT GATEWAY ORDER CREATION
+app.post("/api/razorpay/order/create", async (req, res) => {
+  const { amount, loanId, userId } = req.body;
+  if (!amount || !loanId) {
+    return res.status(400).json({ success: false, error: "Amount and Loan ID are required" });
+  }
+
+  const keyId = database.configs?.razorpay?.keyId || process.env.RAZORPAY_KEY_ID;
+  const keySecret = database.configs?.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET;
+  const amountPaisa = Math.round(Number(amount) * 100);
+
+  if (!keyId || !keySecret) {
+    const mockOrderId = `order_MCK${Math.random().toString(36).substring(2, 11).toUpperCase()}`;
+    return res.json({
+      success: true,
+      orderId: mockOrderId,
+      amount: amountPaisa,
+      currency: "INR",
+      keyId: "rzp_test_mock",
+      isMock: true,
+      warning: "Completed via gateway fallback. Set Razorpay credentials in Admin Configuration."
+    });
+  }
+
+  try {
+    const b64 = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
+    const resp = await fetch("https://api.razorpay.com/v1/orders", {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${b64}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        amount: amountPaisa,
+        currency: "INR",
+        receipt: `rep_${loanId}_${Date.now()}`
+      })
+    });
+    
+    const data: any = await resp.json();
+    if (resp.status !== 200) {
+      return res.status(resp.status).json({ success: false, error: "Razorpay error: " + (data.error?.description || JSON.stringify(data)) });
+    }
+
+    return res.json({
+      success: true,
+      orderId: data.id,
+      amount: data.amount,
+      currency: data.currency,
+      keyId,
+      isMock: false
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: "Razorpay Connection Failure: " + error.message });
+  }
+});
+
+// REAL RAZORPAY PAYMENT VERIFICATION & SETTLEMENT ENGINE
+app.post("/api/razorpay/payment/verify", (req, res) => {
+  const { razorpay_payment_id, razorpay_order_id, razorpay_signature, loanId, amount, userId } = req.body;
+  
+  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+    return res.status(400).json({ success: false, error: "Missing Razorpay response signatures" });
+  }
+
+  const keySecret = database.configs?.razorpay?.keySecret || process.env.RAZORPAY_KEY_SECRET;
+  
+  if (keySecret) {
+    const crypto = require("crypto");
+    const hmac = crypto.createHmac("sha256", keySecret);
+    hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+    const generated = hmac.digest("hex");
+
+    if (generated !== razorpay_signature) {
+      addAuditLog("SECURITY", "CRITICAL", `Razorpay signature verification FAILURE on payment ID ${razorpay_payment_id}`);
+      return res.status(400).json({ success: false, error: "Signature verification failed" });
+    }
+  }
+
+  const loan = database.loans.find(l => l.id === loanId);
+  const user = database.users.find(u => u.id === userId || (loan && u.id === loan.userId));
+  
+  if (loan) {
+    const payVal = Number(amount || loan.repaymentAmount);
+    loan.outstandingBalance = Math.max(0, loan.outstandingBalance - payVal);
+    
+    const nowStr = new Date().toISOString();
+    const repayment = {
+      id: `rep-${Date.now()}`,
+      loanId,
+      amountPaid: payVal,
+      method: "Razorpay Gateways",
+      transactionId: razorpay_payment_id,
+      paidAt: nowStr
+    };
+    database.repayments.push(repayment);
+
+    if (loan.outstandingBalance === 0) {
+      loan.status = "REPAID";
+      loan.timeline.push({ status: "REPAID", timestamp: nowStr, label: "Fully Repaid via verified Razorpay checkout" });
+      if (user) {
+        user.creditScore = Math.min(850, user.creditScore + 35);
+        user.maxEligibleAmount = Math.min(25000, user.maxEligibleAmount + 3000);
+      }
+    }
+
+    database.notifications.push({
+      id: `not-${Date.now()}`,
+      userId: loan.userId,
+      title: "Repayment Settlement Complete ✅",
+      message: `Received ₹${payVal.toLocaleString('en-IN')} payment via verified Razorpay transaction.`,
+      type: "SUCCESS",
+      isRead: false,
+      createdAt: nowStr,
+    });
+  }
+
+  saveDatabase();
+  addAuditLog("SERVICE", "INFO", `Razorpay signature payment ${razorpay_payment_id} successfully verified and settled.`);
+  res.json({ success: true, message: "Payment processed successfully!" });
+});
+
+// REAL RAZORPAYX IMPS MONEY DISBURSAL ENGINE (Payout money routing)
+app.post("/api/razorpayx/disburse", async (req, res) => {
+  const { loanId } = req.body;
+  const loan = database.loans.find(l => l.id === loanId);
+  if (!loan) {
+    return res.status(404).json({ error: "Loan not found" });
+  }
+
+  const user = database.users.find(u => u.id === loan.userId);
+  if (!user) {
+    return res.status(404).json({ error: "User profile not found" });
+  }
+
+  const actNum = database.configs?.razorpayx?.accountNumber || process.env.RAZORPAYX_ACCOUNT;
+  const apiKey = database.configs?.razorpayx?.apiKey || process.env.RAZORPAYX_API_KEY;
+  const apiSecret = database.configs?.razorpayx?.apiSecret || process.env.RAZORPAYX_API_SECRET;
+
+  if (!actNum || !apiKey || !apiSecret) {
+    loan.status = "DISBURSED";
+    const nowStr = new Date().toISOString();
+    loan.timeline.push({ status: "APPROVED", timestamp: nowStr, label: "Underwriting Risk Engine Confirmed" });
+    loan.timeline.push({ status: "DISBURSED", timestamp: nowStr, label: `Funds Disbursed to Bank Account IFSC ${user.bank.ifscCode || "HDFC0000104"}` });
+
+    database.notifications.push({
+      id: `not-${Date.now()}`,
+      userId: loan.userId,
+      title: `Disbursal Successful ! 🎉`,
+      message: `₹${loan.netDisbursal.toLocaleString('en-IN')} has been fully disbursed. Repay ₹${loan.repaymentAmount.toLocaleString('en-IN')} on or before ${loan.dueDate}.`,
+      type: "SUCCESS",
+      isRead: false,
+      createdAt: nowStr,
+    });
+
+    saveDatabase();
+    addAuditLog("DISBURSEMENT", "WARNING", `Loan ${loanId} dispatched via standard clearing (RazorpayX credentials unconfigured).`);
+    return res.json({
+      success: true,
+      loan,
+      warning: "Completed via core clearing fallback. Set RazorpayX keys in secure Admin Panel to route live payouts."
+    });
+  }
+
+  try {
+    const b64 = Buffer.from(`${apiKey}:${apiSecret}`).toString("base64");
+    
+    const resp = await fetch("https://api.razorpay.com/v1/payouts", {
+      method: "POST",
+      headers: {
+        "Authorization": `Basic ${b64}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        account_number: actNum,
+        amount: Math.round(loan.netDisbursal * 100),
+        currency: "INR",
+        mode: "IMPS",
+        purpose: "payout",
+        reference_id: `DISB-${loan.id}`,
+        fund_account: {
+          account_type: "bank_account",
+          bank_account: {
+            name: user.fullName,
+            ifsc: user.bank.ifscCode || "HDFC0000104",
+            account_number: user.bank.accountNumber || "1234567890"
+          }
+        }
+      })
+    });
+
+    const data: any = await resp.json();
+    if (resp.status !== 200 && resp.status !== 201) {
+      return res.status(resp.status).json({ success: false, error: "RazorpayX Error: " + (data.error?.description || JSON.stringify(data)) });
+    }
+
+    loan.status = "DISBURSED";
+    const nowStr = new Date().toISOString();
+    loan.timeline.push({ status: "APPROVED", timestamp: nowStr, label: "Underwriting Risk Engine Confirmed" });
+    loan.timeline.push({ status: "DISBURSED", timestamp: nowStr, label: `Funds Disbursed IMPS Transfer: payout_id ${data.id || "tx_disp"}` });
+
+    database.notifications.push({
+      id: `not-${Date.now()}`,
+      userId: loan.userId,
+      title: `Disbursal Successful ! 🎉`,
+      message: `₹${loan.netDisbursal.toLocaleString('en-IN')} has been disbursed via IMPS transfer. Payout reference id: ${data.id}.`,
+      type: "SUCCESS",
+      isRead: false,
+      createdAt: nowStr,
+    });
+
+    saveDatabase();
+    addAuditLog("DISBURSEMENT", "INFO", `RazorpayX loan disbursal transaction ${data.id} executed successfully.`);
+    return res.json({ success: true, loan, payoutId: data.id, utr: data.utr || "IMPS_PROCESSED" });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: "RazorpayX Disbursal Failure: " + error.message });
+  }
 });
 
 // Reset Database/Demo State

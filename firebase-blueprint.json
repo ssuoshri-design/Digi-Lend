@@ -1,0 +1,138 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User registration and fintech eligibility profiling",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Local unique identifier" },
+        "fullName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "dob": { "type": "string" },
+        "gender": { "type": "string" },
+        "occupation": { "type": "string" },
+        "employmentType": { "type": "string" },
+        "monthlyIncome": { "type": "number" },
+        "creditScore": { "type": "number" },
+        "maxEligibleAmount": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "fullName", "phone"]
+    },
+    "KycStatus": {
+      "title": "KYC Status",
+      "description": "C-KYC, Aadhaar, and identity verification logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "panNumber": { "type": "string" },
+        "panFullName": { "type": "string" },
+        "panStatus": { "type": "string" },
+        "digilockerVerified": { "type": "boolean" },
+        "aadhaarAddress": { "type": "string" },
+        "selfieUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "VERIFIED", "REJECTED"] },
+        "verifiedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "status"]
+    },
+    "BankVerification": {
+      "title": "Bank Account Penny-Hop Verification",
+      "description": "Verified banking routes via penny drop matching IFSC",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "accountNumber": { "type": "string" },
+        "ifscCode": { "type": "string" },
+        "bankName": { "type": "string" },
+        "accountHolderName": { "type": "string" },
+        "isVerified": { "type": "boolean" },
+        "verifiedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "accountNumber", "ifscCode", "isVerified"]
+    },
+    "Loan": {
+      "title": "Loan Application",
+      "description": "Digital credit line structures and billing matrices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "interestRate": { "type": "number" },
+        "processingFee": { "type": "number" },
+        "gst": { "type": "number" },
+        "tenureDays": { "type": "number" },
+        "netDisbursal": { "type": "number" },
+        "repaymentAmount": { "type": "number" },
+        "outstandingBalance": { "type": "number" },
+        "status": { "type": "string", "enum": ["APPLIED", "APPROVED", "DISBURSED", "REPAID", "CLOSED", "OVERDUE"] },
+        "dueDate": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "amount", "status"]
+    },
+    "Payment": {
+      "title": "Payment Record",
+      "description": "Repayment settling entries via Razorpay Gateways",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "loanId": { "type": "string" },
+        "userId": { "type": "string" },
+        "amountPaid": { "type": "number" },
+        "method": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "status": { "type": "string" },
+        "paidAt": { "type": "string" }
+      },
+      "required": ["id", "loanId", "userId", "amountPaid", "transactionId"]
+    },
+    "Disbursal": {
+      "title": "Disbursal Record",
+      "description": "RazorpayX commercial money routing and payout receipts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "loanId": { "type": "string" },
+        "amount": { "type": "number" },
+        "payoutId": { "type": "string" },
+        "status": { "type": "string" },
+        "bankAccount": { "type": "string" },
+        "ifscCode": { "type": "string" },
+        "utr": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "loanId", "amount", "payoutId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles indexed by dynamic Google UID"
+    },
+    "/kyc_records/{recordId}": {
+      "schema": "KycStatus",
+      "description": "Historical or active KYC validations"
+    },
+    "/bank_records/{recordId}": {
+      "schema": "BankVerification",
+      "description": "Instant penny drop verify logs"
+    },
+    "/loans/{loanId}": {
+      "schema": "Loan",
+      "description": "Active and completed loan files"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Razorpay settlement audits"
+    },
+    "/disbursals/{disbursalId}": {
+      "schema": "Disbursal",
+      "description": "RazorpayX disbursal payouts logs"
+    }
+  }
+}
