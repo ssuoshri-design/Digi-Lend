@@ -13,6 +13,7 @@ import { auth, db } from "./firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { getDocFromServer, doc } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
+import { LoginBackground3D } from "./components/LoginBackground3D";
 
 export default function App() {
   // Mobile stages: "SPLASH" | "ONBOARDING" | "LOGIN" | "OTP" | "PERMISSIONS" | "KYC_FUNNEL" | "ELIGIBILITY" | "APPROVAL" | "DASHBOARD" | "APPLY_LOAN" | "REPAY_FLOW"
@@ -108,6 +109,7 @@ export default function App() {
   const [fbConnStatus, setFbConnStatus] = useState<"CONNECTED" | "DISCONNECTED" | "ERROR">("CONNECTED");
   const [fbLastOtpSent, setFbLastOtpSent] = useState<string>("None");
   const [fbLastOtpFailure, setFbLastOtpFailure] = useState<string>("None");
+  const [fbLastOtpTimestamp, setFbLastOtpTimestamp] = useState<string>("None");
   const [fbErrorLogs, setFbErrorLogs] = useState<string[]>([]);
   const [fbOtpSuccessCount, setFbOtpSuccessCount] = useState<number>(0);
   const [fbOtpTotalCount, setFbOtpTotalCount] = useState<number>(0);
@@ -117,7 +119,6 @@ export default function App() {
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState<boolean>(false);
   const [otpError, setOtpError] = useState<string>("");
-  const [isOtpSimulated, setIsOtpSimulated] = useState<boolean>(false);
 
   // Audit parameters requested by user
   const [otpRequestStatus, setOtpRequestStatus] = useState<"IDLE" | "SOLVING_CAPTCHA" | "SENDING" | "SENT" | "FAILED">("IDLE");
@@ -220,6 +221,7 @@ export default function App() {
       
       setConfirmationResult(confResult);
       setFbLastOtpSent(new Date().toLocaleTimeString());
+      setFbLastOtpTimestamp(new Date().toLocaleString());
       setFbOtpTotalCount(prev => prev + 1);
       setFbOtpSuccessCount(prev => prev + 1);
       setIsSendingOtp(false);
@@ -270,49 +272,20 @@ export default function App() {
       setErrorMessage(errMsg);
 
       let deliveryDesc = "FAILED";
-      let isRateLimitOrQuota = false;
       if (errCode === "auth/invalid-phone-number") {
         deliveryDesc = "BLOCK_INVALID_FORMAT: The phone number format is incorrect. Make sure it contains exactly 10 digits without leading zero.";
       } else if (errCode === "auth/app-not-authorized") {
         deliveryDesc = "BLOCK_UNAUTHORIZED_DOMAIN: This app or domain is not authorized for firebase authentication. Add your current server domain name to OAuth redirects list in Firebase console.";
       } else if (errCode === "auth/sms-quota-exceeded") {
-        deliveryDesc = "CRITICAL_QUOTA_EXCEEDED: SMS free tier quota (Spark supports 10 free SMS / day globally) is exhausted.";
-        isRateLimitOrQuota = true;
+        deliveryDesc = "CRITICAL_QUOTA_EXCEEDED: SMS free tier quota supports 10 free SMS / day. Quota is exhausted.";
       } else if (errCode === "auth/captcha-check-failed") {
         deliveryDesc = "BLOCK_RECAPTCHA_FAILED: reCAPTCHA verification challenge failed. Check network access.";
       } else if (errCode === "auth/too-many-requests") {
         deliveryDesc = "BLOCK_RATE_LIMIT: Blocked due to suspicious spike of requests. Please try again later.";
-        isRateLimitOrQuota = true;
       } else {
         deliveryDesc = `DELIVERY_FAILED: ${errMsg}`;
-        // Any other firebase failure, allow simulated fallback to keep the demo 100% accessible
-        isRateLimitOrQuota = true;
       }
       setDeliveryStatus(deliveryDesc);
-
-      if (isRateLimitOrQuota) {
-        console.warn(`[Firebase High Availability Fallback] Activating simulated mock OTP flow due to ${errCode}.`);
-        setIsOtpSimulated(true);
-        setConfirmationResult(null); // Explicit fallback
-        setOtpTimer(60);
-        setOtpCode(["", "", "", "", "", ""]);
-        setStage("OTP");
-        setOtpRequestStatus("SENT");
-        setDeliveryStatus("SIMULATED_TEST_MODE_ACTIVE");
-        setFbResponseRaw(`[FALLBACK ACTIVE] Firebase rate-limited, quota exceeded, or sandbox issue (${errCode}). Simulated OTP sandbox verification enabled for safety.`);
-        setOtpError("");
-      } else {
-        console.warn(`[Firebase Fallback Flow] Activating high-availability simulated OTP due young auth exception.`);
-        setIsOtpSimulated(true);
-        setConfirmationResult(null);
-        setOtpTimer(60);
-        setOtpCode(["", "", "", "", "", ""]);
-        setStage("OTP");
-        setOtpRequestStatus("SENT");
-        setDeliveryStatus("SIMULATED_TEST_MODE_ACTIVE");
-        setFbResponseRaw(`[FALLBACK ACTIVE] Firebase issue: ${errMsg}. Fallback active.`);
-        setOtpError("");
-      }
     }
   };
 
@@ -376,6 +349,7 @@ export default function App() {
       setFbOtpSuccessCount(prev => prev + 1);
       setTestOtpResult("✅ REAL SMS OTP sent successfully via Firebase! Enter OTP in user device simulator tab to verify.");
       setFbLastOtpSent(new Date().toLocaleTimeString());
+      setFbLastOtpTimestamp(new Date().toLocaleString());
       setIsSendingTestOtp(false);
 
       // Populate diagnostics
@@ -1082,54 +1056,37 @@ export default function App() {
     setErrorMessage("None");
 
     try {
-      if (confirmationResult && !isOtpSimulated) {
-        console.log(`Verifying real 6-digit Firebase OTP: ${fullOtp}`);
-        const credential = await confirmationResult.confirm(fullOtp);
-        const fbUser = credential.user;
-        console.log("Firebase Phone Auth Authentication Success: ", fbUser);
-        
-        // Push secure admin audit log
-        await fetch("/api/admin/audit/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category: "SECURITY",
-            level: "INFO",
-            message: `User phone +91 ${phoneNumber} authenticated via Firebase OTP. UID: ${fbUser.uid}`
-          })
-        }).catch(err => console.warn("Audit push ignored: ", err));
-
-        // Set diagnostics success state
-        setOtpRequestStatus("SENT");
-        setFbResponseRaw(JSON.stringify({
-          uid: fbUser.uid,
-          phoneNumber: fbUser.phoneNumber,
-          success: true,
-          message: "Firebase verification confirms valid auth state! User logged in/verified."
-        }, null, 2));
-        setErrorCode("None");
-        setErrorMessage("None");
-        setDeliveryStatus("OTP_SUCCESS_VERIFIED");
-      } else {
-        console.warn("No real confirmationResult found in session or simulated mode active, bypassing verification checks.");
-        if (isOtpSimulated && fullOtp.length !== 6) {
-          setOtpError("Please enter a complete 6-digit security PIN.");
-          setOtpRequestStatus("FAILED");
-          setDeliveryStatus("SIMULATED_OTP_INVALID");
-          return;
-        }
-        setOtpError("");
-        setOtpRequestStatus("SENT");
-        setFbResponseRaw(JSON.stringify({
-          uid: "mock-uid-" + phoneNumber,
-          phoneNumber: "+91" + phoneNumber,
-          success: true,
-          message: "Simulated high-availability sandbox authentication completed! User pre-approved."
-        }, null, 2));
-        setErrorCode("None");
-        setErrorMessage("None");
-        setDeliveryStatus("DEV_MODE_BYPASS_VERIFICATION");
+      if (!confirmationResult) {
+        throw new Error("No active Firebase validation session exists. Please request a new OTP first.");
       }
+      
+      console.log(`Verifying real 6-digit Firebase OTP: ${fullOtp}`);
+      const credential = await confirmationResult.confirm(fullOtp);
+      const fbUser = credential.user;
+      console.log("Firebase Phone Auth Authentication Success: ", fbUser);
+      
+      // Push secure admin audit log
+      await fetch("/api/admin/audit/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: "SECURITY",
+          level: "INFO",
+          message: `User phone +91 ${phoneNumber} authenticated via Firebase OTP. UID: ${fbUser.uid}`
+        })
+      }).catch(err => console.warn("Audit push ignored: ", err));
+
+      // Set diagnostics success state
+      setOtpRequestStatus("SENT");
+      setFbResponseRaw(JSON.stringify({
+        uid: fbUser.uid,
+        phoneNumber: fbUser.phoneNumber,
+        success: true,
+        message: "Firebase verification confirms valid auth state! User logged in/verified."
+      }, null, 2));
+      setErrorCode("None");
+      setErrorMessage("None");
+      setDeliveryStatus("OTP_SUCCESS_VERIFIED");
 
       // Check registration status
       const isNewUser = !fintechDb.users.some(
@@ -1872,70 +1829,75 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex-1 p-6 flex flex-col justify-between"
+                className="flex-1 p-6 flex flex-col justify-between relative overflow-hidden bg-[#020818]"
               >
-                <div>
-                  <div className="flex items-center space-x-2 pt-2 pb-4">
-                    <button onClick={() => setStage("ONBOARDING")} className="p-1.5 rounded-full text-zinc-400 hover:text-white transition-colors hover:bg-zinc-900">
-                      <ArrowLeft className="w-5 h-5" />
-                    </button>
-                  </div>
+                {/* Immersive 3D Interactive Background */}
+                <LoginBackground3D />
 
-                  <div className="mb-6 flex justify-start select-none">
-                    {renderAppLogo("md", "horizontal")}
-                  </div>
+                <div className="relative z-10 flex flex-col justify-between flex-1 h-full">
+                  <div>
+                    <div className="flex items-center space-x-2 pt-2 pb-4">
+                      <button onClick={() => setStage("ONBOARDING")} className="p-1.5 rounded-full text-zinc-400 hover:text-white transition-colors hover:bg-zinc-900">
+                        <ArrowLeft className="w-5 h-5" />
+                      </button>
+                    </div>
 
-                  <h2 className="text-3xl font-black tracking-tight text-white leading-tight font-sans mt-2">Welcome Back</h2>
-                  <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-                    Please verify your mobile number to access your DigiLend account safely.
-                  </p>
+                    <div className="mb-6 flex justify-start select-none">
+                      {renderAppLogo("md", "horizontal")}
+                    </div>
 
-                  <div className="mt-8 space-y-2.5">
-                    <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Mobile Number</label>
-                    
-                    <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
-                      <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
-                        <span>🇮🇳</span>
-                        <span>+91</span>
-                      </span>
-                      <input 
-                        type="tel"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={10}
-                        placeholder="Enter 10-Digit Phone"
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                        className="flex-1 bg-transparent border-none p-0 text-base font-semibold tracking-widest text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700"
-                        autoFocus
-                      />
+                    <h2 className="text-3xl font-black tracking-tight text-white leading-tight font-sans mt-2">Welcome Back</h2>
+                    <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+                      Please verify your mobile number to access your DigiLend account safely.
+                    </p>
+
+                    <div className="mt-8 space-y-2.5">
+                      <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Mobile Number</label>
+                      
+                      <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
+                        <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
+                          <span>🇮🇳</span>
+                          <span>+91</span>
+                        </span>
+                        <input 
+                          type="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          maxLength={10}
+                          placeholder="Enter 10-Digit Phone"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
+                          className="flex-1 bg-transparent border-none p-0 text-base font-semibold tracking-widest text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700"
+                          autoFocus
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="pb-6">
-                  <button 
-                    onClick={startOTPVerifyFlow}
-                    disabled={phoneNumber.length < 10 || isSendingOtp}
-                    className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all flex items-center justify-center space-x-2.5 ${
-                      phoneNumber.length === 10 && !isSendingOtp
-                        ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110 active:scale-[0.99]"
-                        : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
-                    }`}
-                  >
-                    {isSendingOtp ? (
-                      <>
-                        <RefreshCcw className="w-5 h-5 animate-spin text-white" />
-                        <span>Sending One-Time Password...</span>
-                      </>
-                    ) : (
-                      <span>Continue</span>
-                    )}
-                  </button>
+                  <div className="pb-6">
+                    <button 
+                      onClick={startOTPVerifyFlow}
+                      disabled={phoneNumber.length < 10 || isSendingOtp}
+                      className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all flex items-center justify-center space-x-2.5 ${
+                        phoneNumber.length === 10 && !isSendingOtp
+                          ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110 active:scale-[0.99]"
+                          : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
+                      }`}
+                    >
+                      {isSendingOtp ? (
+                        <>
+                          <RefreshCcw className="w-5 h-5 animate-spin text-white" />
+                          <span>Sending One-Time Password...</span>
+                        </>
+                      ) : (
+                        <span>Continue</span>
+                      )}
+                    </button>
 
-                  <p className="text-[9.5px] text-zinc-600 text-center mt-3.5 font-mono">
-                    By proceeding, you authorize {platformName} to match CIBIL information.
-                  </p>
+                    <p className="text-[9.5px] text-zinc-650 text-center mt-3.5 font-mono">
+                      By proceeding, you authorize {platformName} to match CIBIL information.
+                    </p>
+                  </div>
                 </div>
               </motion.div>
             )}
@@ -1968,9 +1930,10 @@ export default function App() {
                         <input 
                           key={idx}
                           id={`otp-box-${idx}`}
-                          type="tel"
+                          type="text"
                           inputMode="numeric"
                           pattern="[0-9]*"
+                          autoComplete="one-time-code"
                           maxLength={1}
                           value={otpCode[idx] || ""}
                           placeholder="•"
@@ -1998,25 +1961,6 @@ export default function App() {
                         />
                       ))}
                     </div>
-
-                    <div className="pt-2 text-center">
-                      <button 
-                        onClick={() => setOtpCode(["9", "9", "8", "8", "0", "0"])} 
-                        className="text-[10px] font-bold font-mono text-zinc-500 hover:text-[#FF7A00] bg-zinc-950/60 border border-zinc-800 py-2 px-4 rounded-xl transition-all hover:bg-zinc-950 active:scale-95"
-                      >
-                        Auto Fill PIN (998800)
-                      </button>
-                    </div>
-
-                    {isOtpSimulated && (
-                      <div className="p-3.5 rounded-xl bg-[#FF7A00]/10 border border-[#FF7A00]/20 text-zinc-300 text-[11px] leading-relaxed text-center font-sans">
-                        <div className="font-bold flex items-center justify-center gap-1.5 text-[#FF7A00] mb-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#FF7A00] animate-pulse"></span>
-                          <span>High-Availability Mode Active</span>
-                        </div>
-                        Firebase SMS limit reached. You can enter <strong className="text-white font-semibold">any 6-digit verification code</strong> (including <strong className="text-white font-semibold">998800</strong>) to log in instantly!
-                      </div>
-                    )}
 
                     {otpError && (
                       <div className="p-3.5 rounded-xl bg-red-950/20 border border-red-900/30 text-red-400 text-[10px] font-mono leading-relaxed text-center">
@@ -2189,16 +2133,17 @@ export default function App() {
                         </div>
 
                         <div className="pt-2">
-                          <label className="text-[9px] tracking-widest text-zinc-500 block mb-1 font-mono">SIMULATED AADHAAR PIN</label>
+                          <label className="text-[9px] tracking-widest text-zinc-500 block mb-1 font-mono">ENTER AADHAAR PIN</label>
                           <div className="flex justify-center space-x-2">
                             {[0, 1, 2, 3, 4, 5].map((i) => (
                               <input 
                                 key={i}
                                 id={`aadhaar-pin-${i}`}
                                 maxLength={1}
-                                type="tel"
+                                type="text"
                                 inputMode="numeric"
                                 pattern="[0-9]*"
+                                autoComplete="one-time-code"
                                 value={aadhaarOTP[i]}
                                 onChange={(e) => {
                                   const val = e.target.value.replace(/\D/g, "");
@@ -2225,12 +2170,6 @@ export default function App() {
                               />
                             ))}
                           </div>
-                          <button 
-                            onClick={() => setAadhaarOTP(["4", "0", "9", "2", "1", "8"])} 
-                            className="text-[9px] font-mono text-zinc-400 underline mt-2"
-                          >
-                            Auto Fill Pin
-                          </button>
                         </div>
                       </div>
                     </motion.div>
@@ -3439,18 +3378,19 @@ export default function App() {
 
                   {applyStep === 4 && (
                     <div className="space-y-3">
-                      {/* Aadhaar eSign OTP input mock */}
+                      {/* Aadhaar eSign OTP input */}
                       <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-900 space-y-2">
-                        <label className="text-[9px] tracking-widest text-[#FF7A00] font-mono block text-center">SMS ESIGN OTP MATCH CODE</label>
+                        <label className="text-[9px] tracking-widest text-[#FF7A00] font-mono block text-center">SMS ESIGN OTP SECURITY CODE</label>
                         <div className="flex justify-center space-x-2">
                           {[0, 1, 2, 3].map((v) => (
                             <input 
                               key={v}
                               id={`esign-otp-${v}`}
                               maxLength={1}
-                              type="tel"
+                              type="text"
                               inputMode="numeric"
                               pattern="[0-9]*"
+                              autoComplete="one-time-code"
                               value={esignOTP[v]}
                               onChange={(e) => {
                                 const val = e.target.value.replace(/\D/g, "");
@@ -3462,28 +3402,21 @@ export default function App() {
                                 }
                               }}
                               onKeyDown={(e) => {
-                                if (e.key === "Backspace" && !esignOTP[v] && v > 0) {
-                                  const prevBox = document.getElementById(`esign-otp-${v - 1}`) as HTMLInputElement;
-                                  if (prevBox) {
-                                    prevBox.focus();
-                                    const copy = [...esignOTP];
-                                    copy[v - 1] = "";
-                                    setEsignOTP(copy);
+                                  if (e.key === "Backspace" && !esignOTP[v] && v > 0) {
+                                    const prevBox = document.getElementById(`esign-otp-${v - 1}`) as HTMLInputElement;
+                                    if (prevBox) {
+                                      prevBox.focus();
+                                      const copy = [...esignOTP];
+                                      copy[v - 1] = "";
+                                      setEsignOTP(copy);
+                                    }
                                   }
-                                }
                               }}
                               className="w-8 h-10 text-center font-bold text-[#FF7A00] bg-slate-900 border border-slate-800 rounded-lg focus:outline-hidden"
                               placeholder="•"
                             />
                           ))}
                         </div>
-                        <button 
-                          onClick={() => setEsignOTP(["1", "2", "3", "4"])} 
-                          type="button" 
-                          className="text-[9px] text-[#6B7280] block text-center mx-auto underline mt-1"
-                        >
-                          Auto Fill OTP (1234)
-                        </button>
                       </div>
 
                       <button 
@@ -4597,43 +4530,59 @@ export default function App() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
-                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Authentication Provider Status</span>
-                          <span className={`text-[11px] font-black ${isPhoneAuthDisabled ? "text-red-400 animate-pulse" : "text-emerald-400"}`}>
-                            {authProviderStatus}
-                          </span>
-                        </div>
-
-                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
-                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Phone Auth Enabled/Disabled</span>
-                          <span className={`text-[11px] font-black ${isPhoneAuthDisabled ? "text-red-400" : "text-emerald-400"}`}>
-                            {phoneAuthEnabledText}
-                          </span>
-                        </div>
-
-                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
                           <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Firebase Project ID</span>
-                          <span className="text-[11px] font-semibold text-zinc-300">
+                          <span className="text-[11px] font-mono text-zinc-300 font-bold block mt-1">
                             {firebaseProjectId}
                           </span>
                         </div>
 
                         <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
-                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Firebase Initialization Status</span>
-                          <span className={`text-[11px] font-black ${auth && db ? "text-emerald-400" : "text-red-400"}`}>
-                            {firebaseInitStatus}
+                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Firebase Authentication Status</span>
+                          <span className={`text-[11px] font-black block mt-1 ${auth ? "text-emerald-400" : "text-red-400"}`}>
+                            {auth ? "🟢 Initialized & Active" : "🔴 Uninitialized"}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
+                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Phone Auth Enabled Status</span>
+                          <span className={`text-[11px] font-black block mt-1 ${isPhoneAuthDisabled ? "text-red-400" : "text-emerald-400"}`}>
+                            {isPhoneAuthDisabled ? "🔴 DISABLED / BLOCKED" : "🟢 ENABLED / ACTIVE"}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
+                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Authorized Domain Status</span>
+                          <span className="text-[11px] text-emerald-400 font-bold block mt-1 leading-tight truncate" title={window.location.hostname}>
+                            🟢 Normalized: {window.location.hostname || "authorized-default"}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
+                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Current Environment</span>
+                          <span className="text-[11px] text-amber-500 font-mono font-bold block mt-1">
+                            {window.location.hostname.includes("localhost") || window.location.hostname.includes("127.0.0.1") 
+                              ? "🔧 Development (Localhost)" 
+                              : "🚀 Production (Cloud Host)"}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
+                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">OTP Request Timestamp</span>
+                          <span className="text-[11.5px] font-bold text-zinc-300 font-mono block mt-1">
+                            ⏱️ {fbLastOtpTimestamp}
                           </span>
                         </div>
 
                         <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900 col-span-2">
-                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Last OTP Success</span>
-                          <span className="text-[10.5px] font-bold text-emerald-400 whitespace-pre-wrap">
-                            {lastOtpSuccessText}
+                          <span className="text-[8px] text-zinc-550 uppercase tracking-widest block mb-0.5 font-bold">OTP Verification Status</span>
+                          <span className="text-[11px] font-mono font-bold text-emerald-400 block mt-1 leading-tight whitespace-pre-wrap">
+                            🛡️ {deliveryStatus}
                           </span>
                         </div>
 
                         <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900 col-span-2">
-                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">Last OTP Error</span>
-                          <span className="text-[10.5px] font-bold text-red-400 whitespace-pre-line leading-relaxed">
+                          <span className="text-[8px] text-zinc-550 uppercase tracking-widest block mb-0.5 font-bold">Last Firebase Error Message</span>
+                          <span className="text-[10.5px] font-bold text-red-400 font-mono block mt-1 whitespace-pre-line leading-normal">
                             {lastOtpErrorText}
                           </span>
                         </div>
