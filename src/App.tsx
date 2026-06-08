@@ -1866,6 +1866,42 @@ export default function App() {
                         />
                       </div>
                     </div>
+                    
+                    {/* Elegant Inline Error Callout & Firebase Configuration Guidance */}
+                    {otpError && (
+                      <div className="mt-4 p-4 rounded-2xl bg-red-950/20 border border-red-900/30 text-left space-y-2.5 animate-fadeIn">
+                        <div className="flex items-start gap-2 text-red-500 text-xs font-semibold">
+                          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                          <span>OTP Gateway Dispatch Failed</span>
+                        </div>
+                        <p className="text-zinc-400 text-[10.5px] leading-relaxed font-mono font-medium break-words">
+                          {otpError}
+                        </p>
+
+                        {(otpError.toLowerCase().includes("too-many-requests") || 
+                          otpError.toLowerCase().includes("quota") || 
+                          otpError.toLowerCase().includes("limit") || 
+                          otpError.toLowerCase().includes("captcha") ||
+                          otpError.toLowerCase().includes("request")) && (
+                          <div className="pt-3 border-t border-red-950/40 space-y-2">
+                            <h4 className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-wider font-mono">
+                              How to bypass Firebase rate limits:
+                            </h4>
+                            <p className="text-zinc-500 text-[10px] leading-relaxed">
+                              Firebase Auth triggers automatic protection when too many real SMS requests are sent quickly. You can test continuously with zero limits by white-listing your number:
+                             </p>
+                             <ol className="list-decimal list-inside text-zinc-500 text-[10px] space-y-1.5 pl-1 leading-relaxed">
+                               <li>Open your <strong className="text-zinc-300">Firebase Console</strong></li>
+                               <li>Go to <strong className="text-zinc-300">Build &gt; Authentication &gt; Sign-in method</strong></li>
+                               <li>Expand the <strong className="text-zinc-300">Phone</strong> provider settings</li>
+                               <li>Scroll down of settings to <strong className="text-zinc-300">"Phone numbers for testing (optional)"</strong></li>
+                               <li>Add your mobile number (with country code, e.g. <code className="bg-zinc-900 px-1 py-0.5 rounded font-mono text-zinc-300">+91 {phoneNumber || "9876543210"}</code>) and set a custom 6-digit test code (e.g. <code className="bg-zinc-900 text-[#FF7A00] px-1 py-0.5 rounded font-mono">123456</code>)</li>
+                               <li>Deploy changes instantly in Firebase to clear limits and allow seamless testing!</li>
+                            </ol>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
