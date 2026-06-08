@@ -63,7 +63,7 @@ export default function App() {
     auditLogs: [],
   });
   const platformName = fintechDb.settings?.platformName || "DigiLend";
-  const logoUrl = fintechDb.settings?.logoUrl || "";
+  const logoUrl = fintechDb.settings?.logoUrl || "data:image/png;base64,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";
   const adminInterestRate = fintechDb.settings?.interestRate ?? 2.5;
   const adminFeePercent = fintechDb.settings?.processingFeePercent ?? 3;
   const adminGstPercent = fintechDb.settings?.gstPercent ?? 18;
@@ -4169,103 +4169,6 @@ export default function App() {
                         onChange={(e) => setEditedPlatformName(e.target.value)}
                         className="w-full bg-slate-900 border border-slate-800 text-white font-black text-xs py-2.5 px-3 rounded-lg focus:outline-none focus:border-amber-500"
                       />
-                    </div>
-
-                    {/* Logo upload picker and preview option */}
-                    <div className="space-y-2 pt-1 border-t border-slate-900">
-                      <label className="text-[10px] uppercase font-mono text-zinc-500 block">Bank Profile Logo Icon</label>
-                      
-                      <div className="flex items-center space-x-3 bg-slate-900 border border-slate-800 p-3 rounded-xl text-left">
-                        {/* Logo Preview Container */}
-                        <div className="w-12 h-12 rounded-xl bg-slate-950 border border-zinc-800 flex items-center justify-center overflow-hidden flex-shrink-0">
-                          {editedLogoUrl ? (
-                            <img src={editedLogoUrl} alt="Logo preview" className="max-w-full max-h-full object-contain p-1" referrerPolicy="no-referrer" />
-                          ) : (
-                            <Shield className="w-5 h-5 text-amber-500" />
-                          )}
-                        </div>
-                        
-                        <div className="flex-1 space-y-1.5">
-                          <div className="flex space-x-2">
-                            {/* File Upload Input */}
-                            <label className="bg-slate-800 hover:bg-slate-700 text-white text-[10px] font-bold py-1.5 px-3 rounded-md cursor-pointer transition-all">
-                              Upload Logo Image
-                              <input 
-                                type="file" 
-                                accept="image/*" 
-                                className="hidden" 
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = (event) => {
-                                      if (event.target?.result) {
-                                        const img = new window.Image();
-                                        img.onload = () => {
-                                          const canvas = document.createElement("canvas");
-                                          const MAX_WIDTH = 280;
-                                          const MAX_HEIGHT = 280;
-                                          let width = img.width;
-                                          let height = img.height;
-
-                                          if (width > height) {
-                                            if (width > MAX_WIDTH) {
-                                              height = Math.round(height * (MAX_WIDTH / width));
-                                              width = MAX_WIDTH;
-                                            }
-                                          } else {
-                                            if (height > MAX_HEIGHT) {
-                                              width = Math.round(width * (MAX_HEIGHT / height));
-                                              height = MAX_HEIGHT;
-                                            }
-                                          }
-
-                                          canvas.width = width;
-                                          canvas.height = height;
-                                          const ctx = canvas.getContext("2d");
-                                          if (ctx) {
-                                            ctx.clearRect(0, 0, width, height);
-                                            ctx.drawImage(img, 0, 0, width, height);
-                                            const compressedBase64 = canvas.toDataURL("image/png");
-                                            setEditedLogoUrl(compressedBase64);
-                                          } else {
-                                            setEditedLogoUrl(event.target!.result as string);
-                                          }
-                                        };
-                                        img.src = event.target.result as string;
-                                      }
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
-                                }} 
-                              />
-                            </label>
-                            
-                            {editedLogoUrl && (
-                              <button 
-                                onClick={() => setEditedLogoUrl("")}
-                                className="bg-red-950/40 border border-red-900/30 text-red-400 hover:bg-red-900/10 text-[10px] font-mono py-1 px-2.5 rounded-md transition-all"
-                              >
-                                Clear Logo
-                              </button>
-                            )}
-                          </div>
-                          
-                          <p className="text-[9px] text-zinc-500">Supports PNG, JPG, WebP. Base64 encoded inside the core state.</p>
-                        </div>
-                      </div>
-
-                      {/* Manual Image URL Input fallback */}
-                      <div className="space-y-1">
-                        <label className="text-[9px] text-zinc-600 font-mono">Or provide custom Image URL link</label>
-                        <input 
-                          type="text"
-                          value={editedLogoUrl}
-                          onChange={(e) => setEditedLogoUrl(e.target.value)}
-                          placeholder="https://example.com/logo.png"
-                          className="w-full bg-slate-900 border border-slate-800 text-zinc-300 font-mono text-[10px] py-1.5 px-3 rounded-lg focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 pt-1">
