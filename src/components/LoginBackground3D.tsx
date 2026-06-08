@@ -10,17 +10,47 @@ export function LoginBackground3D() {
   const mouseY = useSpring(0, { stiffness: 60, damping: 22 });
 
   useEffect(() => {
+    let baseTime = 0;
+    let autoPlayId: number;
+    let isUserActive = false;
+    let userTimeout: NodeJS.Timeout;
+
+    // Continuous premium autopilot sway loop
+    const playAutopilot = () => {
+      if (!isUserActive) {
+        baseTime += 0.007;
+        // Float in a clean infinity shape (Lissajous curve) for high kinetic premium impact
+        const ax = Math.sin(baseTime) * 0.45;
+        const ay = Math.cos(baseTime * 0.75) * 0.35;
+        mouseX.set(ax);
+        mouseY.set(ay);
+      }
+      autoPlayId = requestAnimationFrame(playAutopilot);
+    };
+
+    autoPlayId = requestAnimationFrame(playAutopilot);
+
     const handleMouseMove = (e: MouseEvent) => {
+      isUserActive = true;
+      clearTimeout(userTimeout);
+
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width - 0.5;
       const y = (e.clientY - rect.top) / rect.height - 0.5;
       mouseX.set(x);
       mouseY.set(y);
+
+      // Return to autonomous autopilot if cursor is stationary for 3.5 seconds
+      userTimeout = setTimeout(() => {
+        isUserActive = false;
+      }, 3500);
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     return () => {
+      cancelAnimationFrame(autoPlayId);
+      clearTimeout(userTimeout);
       window.removeEventListener("mousemove", handleMouseMove);
     };
   }, [mouseX, mouseY]);
@@ -34,20 +64,24 @@ export function LoginBackground3D() {
   const cardTranslateZ = useTransform(mouseY, [-0.5, 0.5], [35, 55]);
 
   // Drift simulation of floating stars
-  const [stars, setStars] = useState<Array<{ id: number; x: number; y: number; speed: number; size: number; delay: number }>>([]);
+  const [stars, setStars] = useState<Array<{ id: number; x: number; y: number; speed: number; size: number; delay: number; opacity: number }>>([]);
 
   useEffect(() => {
-    const initialStars = Array.from({ length: 24 }).map((_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      speed: 0.15 + Math.random() * 0.35,
-      size: 1.2 + Math.random() * 2.8,
-      delay: Math.random() * 5,
-    }));
+    const initialStars = Array.from({ length: 28 }).map((_, i) => {
+      const size = 1.5 + Math.random() * 3.5;
+      return {
+        id: i,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        speed: 0.12 + Math.random() * 0.28,
+        size: size,
+        delay: Math.random() * 5,
+        opacity: 0.35 + Math.random() * 0.55,
+      };
+    });
     setStars(initialStars);
 
-    // Subtle drift loop
+    // Subtle drift loop with animated breathing sparkle twinkle effect
     let animeId: number;
     const tick = () => {
       setStars((prev) =>
@@ -56,7 +90,9 @@ export function LoginBackground3D() {
           if (nextY < -10) {
             nextY = 110;
           }
-          return { ...s, y: nextY };
+          // Organic sine wave twinkle based on runtime timestamp
+          const nextOpacity = 0.3 + Math.sin(Date.now() * 0.0018 + s.id * 12) * 0.35;
+          return { ...s, y: nextY, opacity: nextOpacity };
         })
       );
       animeId = requestAnimationFrame(tick);
@@ -103,15 +139,15 @@ export function LoginBackground3D() {
             }}
           />
 
-          {/* Glowing planetary orbital circles intersecting in space */}
+          {/* Glowing planetary orbital circles intersecting in space - Repositioned to top-[60%] to clear text */}
           {[120, 220, 310].map((dim, i) => (
             <motion.div
               key={i}
-              className="absolute top-[28%] left-1/2 -translate-x-1/2 rounded-full border border-dashed text-zinc-100"
+              className="absolute top-[60%] left-1/2 -translate-x-1/2 rounded-full border border-dashed text-zinc-100"
               style={{
                 width: dim,
                 height: dim,
-                borderColor: i === 0 ? "rgba(255, 122, 0, 0.08)" : "rgba(8, 27, 75, 0.4)",
+                borderColor: i === 0 ? "rgba(255, 122, 0, 0.15)" : "rgba(8, 27, 75, 0.4)",
                 transform: `translateZ(${-40 - i * 40}px)`,
               }}
               animate={{ rotate: 360 }}
@@ -123,16 +159,17 @@ export function LoginBackground3D() {
             />
           ))}
 
-          {/* 3D Revolving Holographic Credit Card representation */}
+          {/* 3D Revolving Holographic Credit Card representation - Repositioned to top-[60%] to prevent overlap with welcome forms */}
           <motion.div
-            className="absolute top-[22%] left-[16%] w-64 h-38 rounded-2xl p-5 border border-white/5 shadow-[0_24px_50px_rgba(255,122,0,0.14)] flex flex-col justify-between overflow-hidden"
+            className="absolute top-[60%] left-1/2 -ml-32 w-64 h-38 rounded-2xl p-5 border border-white/10 shadow-[0_20px_50px_rgba(255,122,0,0.12)] flex flex-col justify-between overflow-hidden scale-[0.8]"
             style={{
               transformStyle: "preserve-3d",
               rotateX: cardRotateX,
               rotateY: cardRotateY,
-              z: cardTranslateZ,
-              background: "linear-gradient(135deg, rgba(255,122,0,0.1) 0%, rgba(13,32,77,0.45) 60%, rgba(2,5,15,0.9) 100%)",
-              backdropFilter: "blur(10px)",
+              z: 10, // Bring to beautiful foreground depth in safe non-overlapping zone
+              background: "linear-gradient(135deg, rgba(255,122,0,0.2) 0%, rgba(13,32,77,0.65) 60%, rgba(2,5,15,0.95) 100%)",
+              backdropFilter: "blur(8px)",
+              opacity: 0.85, // Highly distinct, bright, and premium look
             }}
           >
             {/* Ambient card background glow highlight */}
@@ -140,7 +177,7 @@ export function LoginBackground3D() {
 
             {/* Laser reflection overlay swept by smooth hardware transition loop */}
             <motion.div 
-              className="absolute inset-0 opacity-[0.14] pointer-events-none"
+              className="absolute inset-0 opacity-[0.22] pointer-events-none"
               style={{
                 background: "linear-gradient(110deg, transparent 15%, rgba(255,122,0,0.4) 30%, rgba(255,255,255,0.6) 45%, rgba(255,122,0,0.4) 60%, transparent 75%)",
                 backgroundSize: "200% 100%",
@@ -167,7 +204,7 @@ export function LoginBackground3D() {
             </div>
 
             {/* Simulated Chip Block */}
-            <div className="w-8 h-6 rounded-md bg-gradient-to-r from-amber-500/80 via-yellow-500/70 to-amber-600/80 p-0.5 border border-amber-400/30 flex flex-col justify-between opacity-80" style={{ transform: "translateZ(20px)" }}>
+            <div className="w-8 h-6 rounded-md bg-gradient-to-r from-amber-500/80 via-yellow-500/70 to-amber-600/80 p-0.5 border border-amber-400/30 flex flex-col justify-between opacity-85" style={{ transform: "translateZ(20px)" }}>
               <div className="flex justify-between h-2.5">
                 <div className="border-r border-slate-950/20 w-2.5 h-full" />
                 <div className="border-l border-slate-950/20 w-2.5 h-full" />
@@ -182,28 +219,28 @@ export function LoginBackground3D() {
             {/* Card Content Layer - Bottom */}
             <div className="flex justify-between items-end" style={{ transform: "translateZ(15px)" }}>
               <div className="flex flex-col">
-                <span className="text-[6px] text-zinc-500 font-mono tracking-widest font-bold">DIGITAL PRE-APPROVED CREDIT</span>
+                <span className="text-[6px] text-zinc-400 font-mono tracking-widest font-bold">DIGITAL PRE-APPROVED CREDIT</span>
                 <span className="text-sm font-black text-rose-50 font-sans tracking-tight mt-0.5">₹ 5,00,000</span>
               </div>
-              <span className="text-[8.5px] font-mono text-zinc-400 font-bold tracking-widest">•••• 9841</span>
+              <span className="text-[8.5px] font-mono text-zinc-300 font-bold tracking-widest">•••• 9841</span>
             </div>
           </motion.div>
 
-          {/* Drifting space particles / dust simulation */}
+          {/* Drifting space particles / dust simulation - High-contrast animated stars with continuous twinkling */}
           {stars.map((s) => (
             <div
               key={s.id}
-              className="absolute rounded-full"
+              className="absolute rounded-full transition-opacity duration-300"
               style={{
                 left: `${s.x}%`,
                 top: `${s.y}%`,
                 width: s.size,
                 height: s.size,
-                backgroundColor: s.id % 2 === 0 ? "#FF7A00" : "#081B4B",
-                opacity: 0.12 + (s.size / 6) * 0.45,
+                backgroundColor: s.id % 3 === 0 ? "#FF7A00" : s.id % 3 === 1 ? "#38BDF8" : "#FFFFFF",
+                opacity: s.opacity,
                 filter: s.size > 2 ? "blur(0.5px)" : "none",
-                boxShadow: s.id % 5 === 0 ? "0 0 6px rgba(255, 122, 0, 0.4)" : "none",
-                transform: `translateZ(${-120 + s.size * 35}px)`,
+                boxShadow: s.id % 4 === 0 ? "0 0 8px rgba(255, 122, 0, 0.6)" : "none",
+                transform: `translateZ(${-100 + s.size * 30}px)`,
               }}
             />
           ))}

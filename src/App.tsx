@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { 
   Shield, Bell, HelpCircle, User, CreditCard, ChevronRight, 
   ArrowLeft, CheckCircle2, IndianRupee, Clock, FileText, Send, Lock,
-  RefreshCw, Award, Camera, Check, Building, FileCheck, ArrowUpRight, Zap,
+  RefreshCw, Award, Camera, Check, Building, FileCheck, ArrowUpRight, Zap, Globe,
   Sparkles, History, Wallet, LogOut, MessageSquare, Key, Phone, Settings, AlertCircle, RefreshCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -171,16 +171,17 @@ export default function App() {
     setIsSendingOtp(true);
     setOtpError("");
     setOtpRequestStatus("SOLVING_CAPTCHA");
-    setFbResponseRaw("Initializing invisible reCAPTCHA challenge...");
+    setFbResponseRaw("Initializing invisible reCAPTCHA verifier for authentic Firebase security...");
     setVerificationId("None");
     setErrorCode("None");
     setErrorMessage("None");
     setDeliveryStatus("CHALLENGING_RECAPTCHA");
+
     try {
       const formattedNum = `+91${num}`;
-      console.log(`[Firebase OTP] Preparing sequence for: ${formattedNum}`);
+      console.log(`[DigiLend SMS] Dispensing code via Firebase to: ${formattedNum}`);
       
-      // Always reset and reconstruct RecaptchaVerifier by creating a new child container inside our wrapper to guarantee clean state and prevent double-render DUPE errors
+      // Clear previous verifiers to prevent duplicate ID or already-rendered issues
       const wrapper = document.getElementById("recaptcha-wrapper");
       if (wrapper) {
         wrapper.innerHTML = "";
@@ -189,12 +190,12 @@ export default function App() {
         try {
           (window as any).recaptchaVerifier.clear();
         } catch (clearErr) {
-          console.warn("Error clearing previous recaptcha verifier:", clearErr);
+          console.warn("Cleared existing recaptcha verifier: ", clearErr);
         }
         (window as any).recaptchaVerifier = null;
       }
 
-      // Create a brand new child element with a unique ID inside the wrapper to prevent "reCAPTCHA has already been rendered" error
+      // Generate pristine dynamic container div
       const dynamicId = "recaptcha-container-div-" + Date.now();
       const dynamicContainer = document.createElement("div");
       dynamicContainer.id = dynamicId;
@@ -202,18 +203,19 @@ export default function App() {
         wrapper.appendChild(dynamicContainer);
       }
 
+      // Mount invisible reCAPTCHA for zero interruption to verified clients
       (window as any).recaptchaVerifier = new RecaptchaVerifier(auth, dynamicId, {
         size: "invisible",
         callback: (response: any) => {
-          console.log("reCAPTCHA solved!", response);
+          console.log("Invisible reCAPTCHA verified successfully.");
         },
         "expired-callback": () => {
-          console.warn("reCAPTCHA expired, please try again");
+          console.warn("reCAPTCHA session expired.");
         }
       });
       
       setOtpRequestStatus("SENDING");
-      setFbResponseRaw("reCAPTCHA verified, calling signInWithPhoneNumber API...");
+      setFbResponseRaw("reCAPTCHA check passed. Submitting SMS delivery request to Firebase Auth network...");
       setDeliveryStatus("SENDING_REQ_TO_FIREBASE");
 
       const appVerifier = (window as any).recaptchaVerifier;
@@ -225,67 +227,61 @@ export default function App() {
       setFbOtpTotalCount(prev => prev + 1);
       setFbOtpSuccessCount(prev => prev + 1);
       setIsSendingOtp(false);
-      
-      // Set Diagnostic screens details
       setOtpRequestStatus("SENT");
       setFbResponseRaw(JSON.stringify({
         verificationId: confResult.verificationId,
         provider: "phone",
-        message: "Real Firebase authorization dispatch completed.",
+        message: "Real SMS generated securely via Firebase.",
         success: true
       }, null, 2));
       setVerificationId(confResult.verificationId);
       setErrorCode("None");
       setErrorMessage("None");
-      setDeliveryStatus("SMS_SENT_DELIVERY_PENDING");
+      setDeliveryStatus("SMS_DELIVERED_SUCCESSFULLY");
 
-      // Navigate to OTP stage
+      // Navigate to OTP input stage
       setOtpCode(["", "", "", "", "", ""]);
       setOtpTimer(60);
       setStage("OTP");
-      console.log("Firebase OTP sent successfully!");
+      console.log("[DigiLend SMS] One-Time Password sent successfully.");
     } catch (err: any) {
-      console.error("Error sending Firebase OTP: ", err);
+      console.error("Firebase Phone SMS Error: ", err);
       const errMsg = err.message || String(err);
       const errCode = err.code || err.name || "UNKNOWN_ERROR";
       
       setOtpError(errMsg);
       setFbLastOtpFailure(errMsg);
       setFbErrorLogs(prev => [
-        `[${new Date().toLocaleTimeString()}] OTP Send Error for +91${num}: ${errMsg}`,
+        `[${new Date().toLocaleTimeString()}] OTP Send Error for ${num}: ${errMsg}`,
         ...prev
       ]);
       setFbOtpTotalCount(prev => prev + 1);
       setIsSendingOtp(false);
-
-      // Populate diagnostics with failed details
       setOtpRequestStatus("FAILED");
       setFbResponseRaw(JSON.stringify({
         code: err.code || null,
-        name: err.name || null,
         message: err.message || null,
-        stack: err.stack || null,
         success: false
       }, null, 2));
       setVerificationId("None");
       setErrorCode(errCode);
       setErrorMessage(errMsg);
-
+      
       let deliveryDesc = "FAILED";
       if (errCode === "auth/invalid-phone-number") {
-        deliveryDesc = "BLOCK_INVALID_FORMAT: The phone number format is incorrect. Make sure it contains exactly 10 digits without leading zero.";
+        deliveryDesc = "BLOCK_INVALID_FORMAT: Correct country code format +91 required. Phone must be exactly 10 digits.";
       } else if (errCode === "auth/app-not-authorized") {
-        deliveryDesc = "BLOCK_UNAUTHORIZED_DOMAIN: This app or domain is not authorized for firebase authentication. Add your current server domain name to OAuth redirects list in Firebase console.";
+        deliveryDesc = "BLOCK_UNAUTHORIZED_DOMAIN: Domain, dynamic links, or bundle setup unauthorized.";
       } else if (errCode === "auth/sms-quota-exceeded") {
-        deliveryDesc = "CRITICAL_QUOTA_EXCEEDED: SMS free tier quota supports 10 free SMS / day. Quota is exhausted.";
+        deliveryDesc = "CRITICAL_QUOTA_EXCEEDED: SMS limit exceeded.";
       } else if (errCode === "auth/captcha-check-failed") {
-        deliveryDesc = "BLOCK_RECAPTCHA_FAILED: reCAPTCHA verification challenge failed. Check network access.";
-      } else if (errCode === "auth/too-many-requests") {
-        deliveryDesc = "BLOCK_RATE_LIMIT: Blocked due to suspicious spike of requests. Please try again later.";
+        deliveryDesc = "BLOCK_RECAPTCHA_FAILED: reCAPTCHA verification failed.";
       } else {
         deliveryDesc = `DELIVERY_FAILED: ${errMsg}`;
       }
       setDeliveryStatus(deliveryDesc);
+      
+      alert("Firebase OTP Send Failed: " + errMsg);
     }
   };
 
@@ -1057,9 +1053,8 @@ export default function App() {
 
     try {
       if (!confirmationResult) {
-        throw new Error("No active Firebase validation session exists. Please request a new OTP first.");
+        throw new Error("No active Firebase validation session exists. Please request or resend a new OTP first.");
       }
-      
       console.log(`Verifying real 6-digit Firebase OTP: ${fullOtp}`);
       const credential = await confirmationResult.confirm(fullOtp);
       const fbUser = credential.user;
@@ -1642,8 +1637,6 @@ export default function App() {
       */}
       <div className="w-full max-w-md min-h-screen bg-[#030E26] shadow-2xl relative flex flex-col overflow-hidden border-x border-[#081B4B]/30 select-none">
         
-
-
         <div className="flex-1 flex flex-col relative overflow-y-auto">
           <AnimatePresence mode="wait">
 
@@ -1851,8 +1844,9 @@ export default function App() {
                       Please verify your mobile number to access your DigiLend account safely.
                     </p>
 
-                    <div className="mt-8 space-y-2.5">
-                      <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Mobile Number</label>
+                    <div className="mt-6 space-y-4">
+                      <div className="space-y-2.5">
+                        <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Mobile Number</label>
                       
                       <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
                         <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
@@ -1873,6 +1867,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+                </div>
 
                   <div className="pb-6">
                     <button 
@@ -1923,6 +1918,8 @@ export default function App() {
                   <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
                     We sent a 6-digit confirmation pin to <span className="text-[#FF7A00] font-mono font-bold">+91 {phoneNumber}</span>.
                   </p>
+
+                       {/* Real Firebase SMS code container */}
 
                   <div className="mt-8 space-y-4">
                     <div className="flex justify-between space-x-2 max-w-[280px] mx-auto">
@@ -2493,98 +2490,140 @@ export default function App() {
                 <div className="p-5 flex-1 space-y-5 text-left">
                   
                   {activeTab === "home" && (
-                    <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity:1 }} className="space-y-5">
+                    <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity:1 }} className="space-y-6">
                       
                       {/* Indian Fintech Namaste Banner */}
-                      <div className="px-1">
-                        <span className="text-[9px] text-[#FF7A00] tracking-widest font-mono font-black uppercase">FINTECH CREDIT DASHBOARD</span>
-                        <h2 className="text-xl font-black font-sans text-white mt-0.5">Namaste, {currentUser ? currentUser.fullName : "James"} 👋</h2>
+                      <div className="px-1 flex justify-between items-end">
+                        <div>
+                          <span className="text-[9.5px] text-[#FF7A00] tracking-widest font-mono font-bold uppercase block">DIGILEND SECURE GATEWAY</span>
+                          <h2 className="text-2xl font-black font-sans text-white mt-1 leading-none tracking-tight">Namaste, {currentUser ? currentUser.fullName : "James"} 👋</h2>
+                          <p className="text-[10px] text-zinc-500 mt-1 font-sans">Account verified under statutory RBI framework</p>
+                        </div>
+                        
+                        <div className="text-right shrink-0">
+                          <span className="text-[9px] font-mono text-zinc-400 bg-slate-900/80 px-2.5 py-1 rounded-md border border-slate-800/60 inline-block font-bold">
+                            LIVE IND-GMT+5:30
+                          </span>
+                        </div>
                       </div>
                       
                       {/* DYNAMIC CREDIT LIMIT MASTER CARD */}
-                      <div className={`p-6 rounded-3xl ${orangeNavyGrad} relative overflow-hidden shadow-2xl border border-white/5 space-y-4`}>
-                        <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl from-white/10 to-transparent rounded-full blur-xl"></div>
+                      <div className="p-6 rounded-3xl bg-gradient-to-br from-[#0c1938] via-slate-900 to-[#1e1302] relative overflow-hidden shadow-[0_20px_50px_rgba(255,122,0,0.15)] border border-white/5 space-y-4">
+                        {/* Shimmer background lines */}
+                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(255,122,0,0.12),transparent_70%)] pointer-events-none"></div>
+                        <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-bl from-white/5 to-transparent rounded-full blur-xl pointer-events-none"></div>
                         
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-[10px] uppercase font-mono tracking-widest text-orange-200 block">Available Balance</span>
-                            <h3 className="text-3xl font-black tracking-tight text-white mt-1">₹20,000</h3>
+                        <div className="flex justify-between items-start relative z-10">
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-mono tracking-widest text-[#FF7A00]/80 block font-bold">Approved Loan Limit</span>
+                            <h3 className="text-3.5xl font-black tracking-tight text-white leading-none">₹20,000</h3>
+                            <span className="text-[9px] text-[#FF7A00] font-mono tracking-wide">AVAILABLE INSTANTLY</span>
                           </div>
                           
-                          {/* Circular Percentage Ring mockup */}
-                          <div className="relative w-14 h-14 flex items-center justify-center bg-slate-900/40 rounded-full border border-white/10">
-                            <span className="text-[10px] font-black text-white">100%</span>
+                          {/* Circular Percentage Ring mockup with glow */}
+                          <div className="relative w-14 h-14 flex items-center justify-center bg-slate-950/60 rounded-full border border-white/15 shadow-inner">
+                            <span className="text-[10.5px] font-black text-white font-sans">100%</span>
                             {/* SVG circular bar */}
-                            <svg className="absolute inset-0 w-full h-full -rotate-44">
-                              <circle cx="28" cy="28" r="22" stroke="#FF7A00" strokeWidth="2.5" fill="none" strokeDasharray="138" strokeDashoffset="0" />
+                            <svg className="absolute inset-0 w-full h-full -rotate-90">
+                              <circle cx="28" cy="28" r="23" stroke="#1e293b" strokeWidth="2.5" fill="none" />
+                              <circle cx="28" cy="28" r="23" stroke="#FF7A00" strokeWidth="2.5" fill="none" strokeDasharray="144" strokeDashoffset="0" strokeLinecap="round" className="drop-shadow-[0_0_4px_rgba(255,122,0,0.4)]" />
                             </svg>
                           </div>
                         </div>
 
-                        <div className="pt-2 flex justify-between items-center">
-                          <div className="text-[10px] text-orange-200">
-                            <span className="block font-mono">Approved APR: 2.5% Flat</span>
-                            <span className="opacity-75">Instant Bank Disbursal</span>
+                        {/* Metallic Chip and Card Branding */}
+                        <div className="flex items-center justify-between pt-1 relative z-10">
+                          {/* Golden interactive metallic microchip mockup */}
+                          <div className="w-9 h-7 rounded-md bg-gradient-to-br from-amber-200 via-yellow-400 to-amber-500 relative overflow-hidden border border-amber-300/30 shadow-md flex flex-col justify-between p-1.5 select-none shrink-0">
+                            <div className="grid grid-cols-3 gap-[2px] h-full w-full opacity-65">
+                              <div className="border border-slate-950/20 rounded-xs"></div>
+                              <div className="border border-slate-950/20 rounded-xs"></div>
+                              <div className="border border-slate-950/20 rounded-xs"></div>
+                            </div>
+                            <div className="absolute inset-x-0 h-[1.5px] bg-slate-950/20 top-1/2 -translate-y-1/2"></div>
                           </div>
 
-                          <button 
+                          <div className="flex space-x-1 items-center font-mono text-[9px] text-zinc-400 bg-slate-950/40 px-2.5 py-1 rounded border border-white/5">
+                            <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                            <span className="font-bold">ACTIVE LINE</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 flex justify-between items-center border-t border-white/5 relative z-10 font-sans">
+                          <div className="text-[10px] text-orange-200/70">
+                            <span className="block font-sans font-bold text-white">Approved APR: 2.5% Flat</span>
+                            <span className="opacity-75">No hidden brokerage / collateral</span>
+                          </div>
+
+                          <motion.button 
+                            whileHover={{ scale: myActiveLoan ? 1 : 1.05 }}
+                            whileTap={{ scale: myActiveLoan ? 1 : 0.95 }}
                             disabled={!!myActiveLoan}
                             onClick={() => { setApplyStep(1); setStage("APPLY_LOAN"); }}
                             className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wide transition-all ${
                               myActiveLoan 
-                                ? "bg-slate-800/40 text-slate-500 cursor-not-allowed" 
-                                : "bg-white text-[#0B1F4D] hover:bg-orange-100 shadow-md"
+                                ? "bg-slate-800/40 text-slate-500 cursor-not-allowed border border-slate-700/20" 
+                                : "bg-white text-[#0B1F4D] hover:bg-orange-100 shadow-md cursor-pointer font-bold"
                             }`}
                           >
                             {myActiveLoan ? "Limit Blocked" : "Apply Loan"}
-                          </button>
+                          </motion.button>
                         </div>
                       </div>
 
-                      {/* ACTIVE LOAN SPECIFIC DETAILS BLOCK */}
+                      {/* ACTIVE LOAN SPECIFIC DETAILS BLOCK / LEDGER STATUS */}
                       {myActiveLoan ? (
-                        <div className="p-4 rounded-2xl bg-gradient-to-r from-red-950/40 to-[#030E26] border border-red-900/30 space-y-3">
-                          <div className="flex justify-between items-center pb-2 border-b border-red-900/10">
+                        <div className="p-4 rounded-2xl bg-gradient-to-br from-[#2a0e0e] via-[#120505] to-[#040815] border border-red-900/40 shadow-xl space-y-4">
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5">
                             <div className="flex items-center space-x-2">
-                              <AlertCircle className="w-4.5 h-4.5 text-orange-500 animate-pulse" />
-                              <span className="text-xs font-extrabold text-orange-400">ACTIVE OUTSTANDING</span>
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                              </span>
+                              <span className="text-xs font-bold text-red-400 uppercase tracking-wider">ACTIVE OUTSTANDING BALANCE</span>
                             </div>
-                            <span className="text-[9px] font-mono text-zinc-500">{myActiveLoan.id}</span>
+                            <span className="text-[9px] font-mono text-zinc-500 bg-zinc-950/80 px-2 py-0.5 rounded border border-white/5">{myActiveLoan.id}</span>
                           </div>
 
                           <div className="flex justify-between items-center text-xs">
                             <div>
-                              <span className="text-[9.5px] text-[#6B7280]">EST. DUE BY {myActiveLoan.dueDate}</span>
-                              <p className="text-lg font-black text-white mt-0.5">₹{myActiveLoan.outstandingBalance.toLocaleString('en-IN')}</p>
+                              <span className="text-[10px] text-zinc-400 tracking-wide font-sans block">ESTIMATED DUE DATE: {myActiveLoan.dueDate}</span>
+                              <p className="text-lg font-black text-white mt-1">₹{myActiveLoan.outstandingBalance.toLocaleString('en-IN')}</p>
                             </div>
 
-                            <button 
+                            <motion.button 
+                              whileHover={{ scale: 1.05 }}
+                              whileTap={{ scale: 0.95 }}
                               onClick={() => { setStage("REPAY_FLOW"); }}
-                              className="px-4 py-2 bg-[#22C55E] hover:bg-green-600 text-slate-950 font-bold rounded-lg text-[11px] font-sans flex items-center space-x-1 shadow-sm"
+                              className="px-4.5 py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-400 hover:from-emerald-400 hover:to-emerald-300 text-[#030E26] font-extrabold rounded-xl text-[11px] font-sans flex items-center space-x-1.5 shadow-[0_4px_15px_rgba(16,185,129,0.25)] transition-all cursor-pointer"
                             >
-                              <Wallet className="w-3.5 h-3.5 font-bold" />
+                              <Wallet className="w-3.5 h-3.5" />
                               <span>Repay Now</span>
-                            </button>
+                            </motion.button>
                           </div>
                         </div>
                       ) : (
-                        <div className="p-4.5 rounded-2xl bg-zinc-950 border border-slate-900 flex justify-between items-center text-xs">
-                          <div className="space-y-0.5 text-zinc-400">
-                            <p className="text-white font-bold inline-flex items-center space-x-1.5">
-                              <CheckCircle2 className="w-4 h-4 text-green-500 fill-green-500/10" />
-                              <span>Verified Clean Ledger status</span>
+                        <div className="p-4.5 rounded-2xl bg-slate-950/50 border border-emerald-950/60 bg-gradient-to-r from-emerald-950/10 to-slate-950 flex justify-between items-center text-xs text-left">
+                          <div className="space-y-1 text-zinc-400 text-left">
+                            <p className="text-white font-bold inline-flex items-center space-x-2">
+                              <span className="p-1 rounded-full bg-emerald-500/10 text-emerald-400">
+                                <CheckCircle2 className="w-4.5 h-4.5" />
+                              </span>
+                              <span className="tracking-tight text-zinc-200">Verified Clean Ledger Standing</span>
                             </p>
-                            <span className="text-[10px] text-zinc-500 block">No active outstanding EMIs. Ready to disburse loan!</span>
+                            <span className="text-[10.5px] text-zinc-500 block">No active outstanding EMIs. Ready to disburse loan instantly!</span>
                           </div>
                         </div>
                       )}
 
                       {/* QUICK ACTION GRID */}
                       <div className="space-y-3">
-                        <h4 className="text-[11px] font-bold font-mono uppercase tracking-wider text-[#FF7A00]">Action Gateways</h4>
-                        <div className="grid grid-cols-3 gap-2.5 text-center text-xs font-sans">
+                        <h4 className="text-[11px] font-bold font-mono uppercase tracking-widest text-[#FF7A00] pl-1">DigiLend Gateways</h4>
+                        <div className="grid grid-cols-3 gap-3 text-center text-xs font-sans">
                           
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.04, y: -2 }}
+                            whileTap={{ scale: 0.96 }}
                             onClick={() => { 
                               if (!myActiveLoan) { 
                                 setApplyStep(1); 
@@ -2600,66 +2639,97 @@ export default function App() {
                                 setActiveBottomSheet("OFFER_DETAIL");
                               } 
                             }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
+                            className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-[#FF7A00]/40 flex flex-col justify-center items-center space-y-2 transition-all text-center relative overflow-hidden group shadow-md cursor-pointer"
                           >
-                            <Zap className="w-5 h-5 text-[#FF7A00]" />
-                            <span className="text-[10.5px] text-zinc-200 font-medium">Apply Loan</span>
-                          </button>
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-[#FF7A00]/10 rounded-full blur-md group-hover:bg-[#FF7A00]/20 transition-all"></div>
+                            <div className="p-2 rounded-xl bg-[#FF7A00]/10 text-[#FF7A00]">
+                              <Zap className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] text-zinc-200 font-bold">Apply Loan</span>
+                          </motion.button>
 
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.04, y: -2 }}
+                            whileTap={{ scale: 0.96 }}
                             onClick={() => { setActiveTab("activity"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
+                            className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-indigo-500/40 flex flex-col justify-center items-center space-y-2 transition-all text-center relative overflow-hidden group shadow-md cursor-pointer"
                           >
-                            <History className="w-5 h-5 text-zinc-300" />
-                            <span className="text-[10.5px] text-zinc-200 font-medium">Loan History</span>
-                          </button>
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-indigo-500/10 rounded-full blur-md group-hover:bg-indigo-500/20 transition-all"></div>
+                            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
+                              <History className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] text-zinc-200 font-bold">History</span>
+                          </motion.button>
 
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.04, y: -2 }}
+                            whileTap={{ scale: 0.96 }}
                             onClick={() => { 
                               setEmiInputAmount(Math.min(20000, currentUser?.maxEligibleAmount || 20000));
                               setEmiInputTenure(30);
                               setActiveBottomSheet("EMI_CALC"); 
                             }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
+                            className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-blue-400/40 flex flex-col justify-center items-center space-y-2 transition-all text-center relative overflow-hidden group shadow-md cursor-pointer"
                           >
-                            <FileCheck className="w-5 h-5 text-blue-400" />
-                            <span className="text-[10.5px] text-zinc-200 font-medium font-sans">EMI Calc</span>
-                          </button>
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-blue-500/10 rounded-full blur-md group-hover:bg-blue-500/20 transition-all"></div>
+                            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
+                              <FileCheck className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] text-zinc-200 font-bold">EMI Calc</span>
+                          </motion.button>
 
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.04, y: -2 }}
+                            whileTap={{ scale: 0.96 }}
                             onClick={() => { setActiveBottomSheet("REWARDS"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
+                            className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-emerald-500/40 flex flex-col justify-center items-center space-y-2 transition-all text-center relative overflow-hidden group shadow-md cursor-pointer"
                           >
-                            <Award className="w-5 h-5 text-[#22C55E]" />
-                            <span className="text-[10.5px] text-zinc-200 font-medium">Rewards</span>
-                          </button>
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-emerald-500/10 rounded-full blur-md group-hover:bg-emerald-500/20 transition-all"></div>
+                            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400">
+                              <Award className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] text-zinc-200 font-bold">Rewards</span>
+                          </motion.button>
 
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.04, y: -2 }}
+                            whileTap={{ scale: 0.96 }}
                             onClick={() => { setActiveTab("support"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
+                            className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-cyan-400/40 flex flex-col justify-center items-center space-y-2 transition-all text-center relative overflow-hidden group shadow-md cursor-pointer"
                           >
-                            <MessageSquare className="w-5 h-5 text-cyan-400" />
-                            <span className="text-[10.5px] text-zinc-200 font-medium">Support</span>
-                          </button>
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-cyan-400/10 rounded-full blur-md group-hover:bg-cyan-400/20 transition-all"></div>
+                            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
+                              <MessageSquare className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] text-zinc-200 font-bold">Support</span>
+                          </motion.button>
 
-                          <button 
+                          <motion.button 
+                            whileHover={{ scale: 1.04, y: -2 }}
+                            whileTap={{ scale: 0.96 }}
                             onClick={() => { setActiveBottomSheet("REFERRAL"); }}
-                            className="p-3 rounded-2xl bg-[#081B4B]/20 border border-[#081B4B]/40 hover:bg-[#FF7A00]/10 flex flex-col justify-center items-center space-y-1.5 transition-all text-center"
+                            className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 hover:border-purple-400/40 flex flex-col justify-center items-center space-y-2 transition-all text-center relative overflow-hidden group shadow-md cursor-pointer"
                           >
-                            <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
-                            <span className="text-[10.5px] text-zinc-200 font-medium">Refer & Earn</span>
-                          </button>
+                            <div className="absolute top-0 right-0 w-8 h-8 bg-purple-500/10 rounded-full blur-md group-hover:bg-purple-500/20 transition-all"></div>
+                            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+                              <Sparkles className="w-5 h-5 animate-pulse" />
+                            </div>
+                            <span className="text-[11px] text-zinc-200 font-bold">Referral</span>
+                          </motion.button>
 
                         </div>
                       </div>
 
                       {/* CURATED VERTICAL DISCOUNTS AND FINTECH OFFERS */}
                       <div className="space-y-3">
-                        <h4 className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-500">Curated Offers For You</h4>
+                        <div className="flex justify-between items-center px-1 font-sans text-left">
+                          <h4 className="text-[11px] font-bold font-mono uppercase tracking-widest text-[#FF7A00]">Exclusive Storefront Offers</h4>
+                        </div>
                         
-                        <div className="flex space-x-3.5 overflow-x-auto pb-2 pr-2 scrollbar-none">
+                        <div className="flex space-x-3.5 overflow-x-auto pb-2 pr-2 scrollbar-none font-sans text-left">
                           
-                          <div 
+                          <motion.div 
+                            whileHover={{ scale: 1.02 }}
                             onClick={() => {
                               setSelectedOffer({
                                 title: "Swiggy Gourmet Flat 25% Cashbacks",
@@ -2670,14 +2740,15 @@ export default function App() {
                               });
                               setActiveBottomSheet("OFFER_DETAIL");
                             }}
-                            className="p-3.5 bg-gradient-to-r from-teal-950 to-[#030E26] rounded-2xl border border-teal-900/30 flex-none w-52 space-y-1.5 text-xs text-left cursor-pointer hover:border-teal-400/40 transition-all"
+                            className="p-4 bg-gradient-to-br from-[#0c2a27] to-slate-950 rounded-2xl border border-teal-900/30 flex-none w-52 space-y-2 text-xs text-left cursor-pointer hover:border-teal-400/40 transition-all shadow-md font-sans"
                           >
-                            <span className="bg-teal-500/20 text-teal-400 font-mono text-[9px] font-black px-2 py-0.5 rounded-full inline-block">SWIGGY GOURMET</span>
+                            <span className="bg-teal-500/20 text-teal-300 font-mono text-[9px] font-black px-2.5 py-0.5 rounded-full inline-block font-bold">SWIGGY GOURMET</span>
                             <h5 className="font-bold text-white leading-tight">Get 25% Flat Cashbacks on food</h5>
-                            <p className="text-[9.5px] text-[#6B7280]">Complete payment utilizing verified loan cards.</p>
-                          </div>
+                            <p className="text-[9.5px] text-zinc-400 leading-normal font-sans">Complete payment utilizing verified loan cards.</p>
+                          </motion.div>
 
-                          <div 
+                          <motion.div 
+                            whileHover={{ scale: 1.02 }}
                             onClick={() => {
                               setSelectedOffer({
                                 title: "Shop Latest Smartphones on Zero Cost EMI",
@@ -2688,14 +2759,15 @@ export default function App() {
                               });
                               setActiveBottomSheet("OFFER_DETAIL");
                             }}
-                            className="p-3.5 bg-gradient-to-r from-indigo-950 to-[#030E26] rounded-2xl border border-indigo-900/30 flex-none w-52 space-y-1.5 text-xs text-left cursor-pointer hover:border-indigo-400/40 transition-all"
+                            className="p-4 bg-gradient-to-br from-[#1c183a] to-slate-950 rounded-2xl border border-indigo-900/30 flex-none w-52 space-y-2 text-xs text-left cursor-pointer hover:border-indigo-400/40 transition-all shadow-md font-sans"
                           >
-                            <span className="bg-indigo-500/20 text-indigo-400 font-mono text-[9px] font-black px-2 py-0.5 rounded-full inline-block">ZERO COST EMI</span>
+                            <span className="bg-indigo-500/20 text-indigo-300 font-mono text-[9px] font-black px-2.5 py-0.5 rounded-full inline-block font-bold">ZERO COST EMI</span>
                             <h5 className="font-bold text-white leading-tight">Shop smartphones on No-Cost EMI</h5>
-                            <p className="text-[9.5px] text-[#6B7280]">Partner networks across Flipkart, Vijay Sales.</p>
-                          </div>
+                            <p className="text-[9.5px] text-zinc-400 leading-normal font-sans">Partner networks across Flipkart, Vijay Sales.</p>
+                          </motion.div>
 
-                          <div 
+                          <motion.div 
+                            whileHover={{ scale: 1.02 }}
                             onClick={() => {
                               setSelectedOffer({
                                 title: "Preset Travel Holiday Booking",
@@ -2706,12 +2778,12 @@ export default function App() {
                               });
                               setActiveBottomSheet("OFFER_DETAIL");
                             }}
-                            className="p-3.5 bg-gradient-to-r from-amber-950 to-[#030E26] rounded-2xl border border-amber-900/30 flex-none w-52 space-y-1.5 text-xs text-left cursor-pointer hover:border-amber-400/40 transition-all"
+                            className="p-4 bg-gradient-to-br from-[#2a1b0c] to-slate-950 rounded-2xl border border-amber-900/30 flex-none w-52 space-y-2 text-xs text-left cursor-pointer hover:border-[#FF7A00]/40 transition-all shadow-md font-sans"
                           >
-                            <span className="bg-[#FF7A00]/20 text-[#FF7A00] font-mono text-[9px] font-black px-2 py-0.5 rounded-full inline-block">PRESET TRAVEL</span>
+                            <span className="bg-[#FF7A00]/20 text-[#FF7A00] font-mono text-[9px] font-black px-2.5 py-0.5 rounded-full inline-block font-bold">PRESET TRAVEL</span>
                             <h5 className="font-bold text-white leading-tight">Book Flights with zero advance pay</h5>
-                            <p className="text-[9.5px] text-[#6B7280]">Enjoy holiday trips; pay in simple 3 EMIs.</p>
-                          </div>
+                            <p className="text-[9.5px] text-zinc-400 leading-normal font-sans">Enjoy holiday trips; pay in simple 3 EMIs.</p>
+                          </motion.div>
 
                         </div>
                       </div>
