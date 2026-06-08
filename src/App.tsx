@@ -1877,6 +1877,10 @@ export default function App() {
                         <p className="text-zinc-400 text-[10.5px] leading-relaxed font-mono font-medium break-words">
                           {otpError}
                         </p>
+                      </div>
+                    )}
+                    {false && (
+                      <div>
 
                         {(otpError.toLowerCase().includes("too-many-requests") || 
                           otpError.toLowerCase().includes("quota") || 
@@ -1900,6 +1904,8 @@ export default function App() {
                             </ol>
                           </div>
                         )}
+
+
                       </div>
                     )}
                   </div>
@@ -4581,6 +4587,13 @@ export default function App() {
                           <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold">OTP Request Timestamp</span>
                           <span className="text-[11.5px] font-bold text-zinc-300 font-mono block mt-1">
                             ⏱️ {fbLastOtpTimestamp}
+                          </span>
+                        </div>
+
+                        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-900">
+                          <span className="text-[8px] text-zinc-500 uppercase tracking-widest block mb-0.5 font-bold font-mono">reCAPTCHA Status</span>
+                          <span className="text-[11px] font-black text-emerald-400 block mt-1 font-mono">
+                            🟢 Invisible Verifier Ready
                           </span>
                         </div>
 
