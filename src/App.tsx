@@ -1889,7 +1889,9 @@ export default function App() {
                         <span>+91</span>
                       </span>
                       <input 
-                        type="text"
+                        type="tel"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         maxLength={10}
                         placeholder="Enter 10-Digit Phone"
                         value={phoneNumber}
@@ -1957,6 +1959,8 @@ export default function App() {
                           key={idx}
                           id={`otp-box-${idx}`}
                           type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
                           maxLength={1}
                           value={otpCode[idx] || ""}
                           placeholder="•"
@@ -1967,6 +1971,17 @@ export default function App() {
                             setOtpCode(copy);
                             if (val && idx < 5) {
                               document.getElementById(`otp-box-${idx + 1}`)?.focus();
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Backspace" && !otpCode[idx] && idx > 0) {
+                              const prevBox = document.getElementById(`otp-box-${idx - 1}`) as HTMLInputElement;
+                              if (prevBox) {
+                                prevBox.focus();
+                                const copy = [...otpCode];
+                                copy[idx - 1] = "";
+                                setOtpCode(copy);
+                              }
                             }
                           }}
                           className="w-10 h-12 text-center text-lg font-black bg-zinc-950 border border-zinc-800 rounded-xl focus:border-[#FF7A00] focus:outline-hidden text-white transition-colors"
@@ -2159,13 +2174,31 @@ export default function App() {
                             {[0, 1, 2, 3, 4, 5].map((i) => (
                               <input 
                                 key={i}
+                                id={`aadhaar-pin-${i}`}
                                 maxLength={1}
                                 type="text"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
                                 value={aadhaarOTP[i]}
                                 onChange={(e) => {
+                                  const val = e.target.value.replace(/\D/g, "");
                                   const copy = [...aadhaarOTP];
-                                  copy[i] = e.target.value.replace(/\D/g, "");
+                                  copy[i] = val;
                                   setAadhaarOTP(copy);
+                                  if (val && i < 5) {
+                                    document.getElementById(`aadhaar-pin-${i + 1}`)?.focus();
+                                  }
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Backspace" && !aadhaarOTP[i] && i > 0) {
+                                    const prevBox = document.getElementById(`aadhaar-pin-${i - 1}`) as HTMLInputElement;
+                                    if (prevBox) {
+                                      prevBox.focus();
+                                      const copy = [...aadhaarOTP];
+                                      copy[i - 1] = "";
+                                      setAadhaarOTP(copy);
+                                    }
+                                  }
                                 }}
                                 className="w-8 h-10 text-center text-sm font-bold bg-slate-900 border border-slate-800 rounded-lg focus:border-[#FF7A00]" 
                                 placeholder="•"
@@ -3393,13 +3426,31 @@ export default function App() {
                           {[0, 1, 2, 3].map((v) => (
                             <input 
                               key={v}
+                              id={`esign-otp-${v}`}
                               maxLength={1}
                               type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
                               value={esignOTP[v]}
                               onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, "");
                                 const copy = [...esignOTP];
-                                copy[v] = e.target.value.replace(/\D/g, "");
+                                copy[v] = val;
                                 setEsignOTP(copy);
+                                if (val && v < 3) {
+                                  document.getElementById(`esign-otp-${v + 1}`)?.focus();
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Backspace" && !esignOTP[v] && v > 0) {
+                                  const prevBox = document.getElementById(`esign-otp-${v - 1}`) as HTMLInputElement;
+                                  if (prevBox) {
+                                    prevBox.focus();
+                                    const copy = [...esignOTP];
+                                    copy[v - 1] = "";
+                                    setEsignOTP(copy);
+                                  }
+                                }
                               }}
                               className="w-8 h-10 text-center font-bold text-[#FF7A00] bg-slate-900 border border-slate-800 rounded-lg focus:outline-hidden"
                               placeholder="•"
