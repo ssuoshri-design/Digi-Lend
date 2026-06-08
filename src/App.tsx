@@ -5245,8 +5245,8 @@ export default function App() {
         </div>
 
         {/* Firebase Invisible Recaptcha Targets */}
-        <div id="recaptcha-wrapper" className="hidden"></div>
-        <div id="admin-recaptcha-wrapper" className="hidden"></div>
+        <div id="recaptcha-wrapper" style={{ position: "absolute", left: "-9999px", top: "-9999px", width: "0px", height: "0px", overflow: "hidden" }}></div>
+        <div id="admin-recaptcha-wrapper" style={{ position: "absolute", left: "-9999px", top: "-9999px", width: "0px", height: "0px", overflow: "hidden" }}></div>
 
       </div>
 
