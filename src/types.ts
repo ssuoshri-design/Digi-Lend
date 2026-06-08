@@ -110,4 +110,5 @@ export interface FullDatabaseState {
   notifications: Notification[];
   tickets: SupportTicket[];
   auditLogs: AuditLog[];
+  otpLogs?: { id: string; phone: string; deviceId: string; ip: string; timestamp: string }[];
 }

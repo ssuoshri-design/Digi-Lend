@@ -383,6 +383,7 @@ const database = {
       message: "Penny drop test initiated on banking routing ID HDFC0000104. Fully settled in 120ms.",
     },
   ] as AuditLog[],
+  otpLogs: [] as { id: string; phone: string; deviceId: string; ip: string; timestamp: string }[],
 };
 
 // Create a deep copy of the original seed database to support precise resetting
@@ -412,6 +413,7 @@ function loadDatabase() {
         if (parsed.notifications) database.notifications = parsed.notifications;
         if (parsed.tickets) database.tickets = parsed.tickets;
         if (parsed.auditLogs) database.auditLogs = parsed.auditLogs;
+        if (parsed.otpLogs) database.otpLogs = parsed.otpLogs;
         console.log("[🟢] Database loaded successfully from database.json");
       }
     } else {
@@ -470,6 +472,100 @@ app.get("/api/db", (req, res) => {
     configs: sanitizedConfigs
   };
   res.json(responseData);
+});
+
+// Production-ready Fintech OTP rate-limiting and audit gate
+app.post("/api/otp/validate-request", (req, res) => {
+  const { phone, deviceId } = req.body;
+  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown_ip";
+
+  if (!phone || phone.length < 10) {
+    return res.status(400).json({ allowed: false, error: "Please enter a valid 10-digit Indian phone number." });
+  }
+
+  const cleanPhone = phone.replace(/\s+/g, "").replace(/\D/g, "");
+  const now = Date.now();
+  const fifteenMinutesAgo = now - 15 * 60 * 1000;
+
+  // Initialize otpLogs array if it doesn't exist
+  if (!database.otpLogs) {
+    database.otpLogs = [];
+  }
+
+  // 1. Enforce 60-second cooldown per phone / device
+  const cooldownPeriod = 60 * 1000;
+  const lastForPhone = database.otpLogs.find(
+    (log) => log.phone === cleanPhone && (now - new Date(log.timestamp).getTime()) < cooldownPeriod
+  );
+  if (lastForPhone) {
+    const elapsed = Math.floor((now - new Date(lastForPhone.timestamp).getTime()) / 1000);
+    return res.json({
+      allowed: false,
+      errorCode: "auth/too-many-requests",
+      error: `Too many verification attempts have been made. Please wait ${60 - elapsed} seconds before requesting another OTP.`
+    });
+  }
+
+  const lastForDevice = database.otpLogs.find(
+    (log) => log.deviceId === deviceId && (now - new Date(log.timestamp).getTime()) < cooldownPeriod
+  );
+  if (lastForDevice) {
+    const elapsed = Math.floor((now - new Date(lastForDevice.timestamp).getTime()) / 1000);
+    return res.json({
+      allowed: false,
+      errorCode: "auth/too-many-requests",
+      error: `Too many verification attempts have been made. Please wait ${60 - elapsed} seconds before requesting another OTP.`
+    });
+  }
+
+  // 2. Enforce Max 3 requests per 15 minutes per phone
+  const phoneRequests = database.otpLogs.filter(
+    (log) => log.phone === cleanPhone && new Date(log.timestamp).getTime() > fifteenMinutesAgo
+  );
+  if (phoneRequests.length >= 3) {
+    return res.json({
+      allowed: false,
+      errorCode: "auth/too-many-requests",
+      error: "Too many verification attempts have been made. Please wait a few minutes before requesting another OTP."
+    });
+  }
+
+  // 3. Enforce Max 3 requests per 15 minutes per device
+  const deviceRequests = database.otpLogs.filter(
+    (log) => log.deviceId === deviceId && new Date(log.timestamp).getTime() > fifteenMinutesAgo
+  );
+  if (deviceRequests.length >= 3) {
+    return res.json({
+      allowed: false,
+      errorCode: "auth/too-many-requests",
+      error: "Too many verification attempts have been made. Please wait a few minutes before requesting another OTP."
+    });
+  }
+
+  // If validation passes, stamp and persist this request attempt
+  const newLog = {
+    id: `otp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    phone: cleanPhone,
+    deviceId: deviceId || "unknown_device",
+    ip: typeof ip === "string" ? ip : JSON.stringify(ip),
+    timestamp: new Date().toISOString()
+  };
+
+  database.otpLogs.unshift(newLog);
+
+  // Prune history older than 2 hours to prevent database size inflation
+  const maxRetentionTime = now - 2 * 60 * 60 * 1000;
+  database.otpLogs = database.otpLogs.filter((log) => new Date(log.timestamp).getTime() > maxRetentionTime);
+
+  saveDatabase();
+
+  addAuditLog(
+    "SECURITY",
+    "INFO",
+    `[DigiLend SMS Engine] Pre-flight OTP rate check approved for phone +91${cleanPhone} (IP: ${ip}, Device ID: ${deviceId})`
+  );
+
+  return res.json({ allowed: true });
 });
 
 // Update dynamic API Gateways credentials securely
