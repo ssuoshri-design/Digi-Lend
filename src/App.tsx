@@ -476,19 +476,23 @@ export default function App() {
   const [auditCategory, setAuditCategory] = useState<"SERVICE" | "SECURITY" | "RISK" | "DISBURSEMENT">("SERVICE");
   const [auditLevel, setAuditLevel] = useState<"INFO" | "WARNING" | "CRITICAL">("INFO");
 
-  // Pre-populate admin fields when server values stream in
+  // Pre-populate admin fields when server values stream in or when panel is opened/closed
   const [hasInitializedAdminFields, setHasInitializedAdminFields] = useState<boolean>(false);
   useEffect(() => {
-    if (fintechDb.settings && !hasInitializedAdminFields) {
-      setEditedPlatformName(fintechDb.settings.platformName);
-      setEditedInterestRate(fintechDb.settings.interestRate);
-      setEditedProcessingFee(fintechDb.settings.processingFeePercent);
-      setEditedGst(fintechDb.settings.gstPercent);
-      setEditedCashback(fintechDb.settings.swiggyCashbackPercent);
-      setEditedLogoUrl(fintechDb.settings.logoUrl || "");
-      setHasInitializedAdminFields(true);
+    if (fintechDb.settings) {
+      if (!isAdminPanelOpen || hasInitializedAdminFields === false) {
+        setEditedPlatformName(fintechDb.settings.platformName);
+        setEditedInterestRate(fintechDb.settings.interestRate);
+        setEditedProcessingFee(fintechDb.settings.processingFeePercent);
+        setEditedGst(fintechDb.settings.gstPercent);
+        setEditedCashback(fintechDb.settings.swiggyCashbackPercent);
+        setEditedLogoUrl(fintechDb.settings.logoUrl || "");
+        if (hasInitializedAdminFields === false) {
+          setHasInitializedAdminFields(true);
+        }
+      }
     }
-  }, [fintechDb.settings, hasInitializedAdminFields]);
+  }, [fintechDb.settings, isAdminPanelOpen]);
 
   useEffect(() => {
     if (fintechDb.configs && !hasInitializedConfigs) {
@@ -967,13 +971,13 @@ export default function App() {
               }
             }
           } catch (jsonErr) {
-            console.error("Local data parsing error:", jsonErr);
+            console.warn("Local data parsing error:", jsonErr);
           }
         }
       }
       setIsLoadingFeed(false);
     } catch (e) {
-      console.error("Backend state synchronization failure: ", e);
+      console.warn("Backend state synchronization failure: ", e);
       const localData = localStorage.getItem("fintech_db_fallback");
       if (localData) {
         try {
@@ -986,7 +990,7 @@ export default function App() {
             }
           }
         } catch (jsonErr) {
-          console.error("Local data parsing error under network error:", jsonErr);
+          console.warn("Local data parsing error under network error:", jsonErr);
         }
       }
       setIsLoadingFeed(false);
@@ -1587,48 +1591,62 @@ export default function App() {
     const isSm = size === "sm";
     const isLg = size === "lg";
     
-    const iconSizeClass = isSm ? "w-8 h-8 rounded-xl" : isLg ? "w-24 h-24 rounded-[1.751rem]" : "w-12 h-12 rounded-2xl";
-    const iconClass = isSm ? "w-4 h-4" : isLg ? "w-12 h-12" : "w-6 h-6";
-    const titleClass = isSm ? "text-sm font-black tracking-tight" : isLg ? "text-3xl font-black tracking-tight" : "text-xl font-bold tracking-tight";
-    const subClass = isSm ? "text-[7.5px] tracking-wider" : isLg ? "text-[10px] tracking-widest" : "text-[8.5px] tracking-widest";
+    // Size metrics for the logo container matching crisp display criteria
+    const iconSizeClass = isSm ? "w-10 h-10" : isLg ? "w-28 h-28" : "w-16 h-16";
+    const iconClass = isSm ? "w-5 h-5" : isLg ? "w-12 h-12" : "w-7 h-7";
+
+    const titleClass = isSm ? "text-lg font-black tracking-tight" : isLg ? "text-4xl font-black tracking-tight sm:text-5xl" : "text-2xl font-black tracking-tight";
+    const subClass = isSm ? "text-[8.5px] tracking-widest" : isLg ? "text-[12px] tracking-widest" : "text-[10px] tracking-widest";
     
     if (logoUrl) {
       return (
-        <div className={`flex ${layout === "vertical" ? "flex-col items-center text-center space-y-3" : "items-center space-x-3"} animate-fade-in`}>
-          <div className="relative group">
-            <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-[#FF7A00] to-[#FF7A00]/0 opacity-30 blur-sm group-hover:opacity-100 transition duration-1000 group-hover:duration-200"></div>
+        <div className={`flex ${layout === "vertical" ? "flex-col items-center text-center space-y-3.5" : "items-center space-x-3.5"} transition-all animate-fade-in`}>
+          {/* Custom logo: pure container with NO outer circle frames or borders to keep the artwork fully visible, clean, and big */}
+          <div className={`${iconSizeClass} flex items-center justify-center select-none shrink-0 group`}>
             <img 
               src={logoUrl} 
               alt={`${platformName} Logo`} 
-              className={`${isSm ? "h-8 max-w-[110px]" : isLg ? "h-20 max-w-[200px]" : "h-12 max-w-[150px]"} relative object-contain`} 
+              className="w-full h-full object-contain scale-[1.3] transition-transform duration-300 group-hover:scale-[1.4]" 
               referrerPolicy="no-referrer" 
             />
           </div>
-          {layout === "vertical" && (
-            <div className="space-y-1">
-              <h1 className="text-3xl font-black tracking-tight text-white">{platformName}</h1>
-              <p className="text-xs tracking-widest text-[#FF7A00] uppercase font-mono font-black">
-                Fast. Secure. Digital.
-              </p>
+          
+          <div className={`${layout === "vertical" ? "text-center" : "text-left"} select-none leading-none`}>
+            <div className={`flex items-center space-x-1.5 ${layout === "vertical" ? "justify-center" : ""}`}>
+              <span className={`${titleClass} text-white leading-tight font-sans font-black`}>{platformName}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FF7A00] animate-pulse"></span>
             </div>
-          )}
+            <p className={`${subClass} text-[#FF7A00]/90 uppercase font-mono font-black tracking-widest mt-1.5`}>
+              FAST • SECURE • DIGITAL
+            </p>
+          </div>
         </div>
       );
     }
-    
+
     return (
-      <div className={`flex ${layout === "vertical" ? "flex-col items-center text-center space-y-3" : "items-center space-x-3"} transition-all animate-fade-in`}>
-        <div className={`${iconSizeClass} bg-gradient-to-tr from-[#FF7A00] to-[#E65C00] p-0.5 shadow-[0_4px_24px_rgba(255,122,0,0.3)] flex items-center justify-center relative overflow-hidden shrink-0 group`}>
-          <div className="absolute inset-x-0 bottom-0 top-1/2 bg-slate-950/25"></div>
+      <div className={`flex ${layout === "vertical" ? "flex-col items-center text-center space-y-3.5" : "items-center space-x-3.5"} transition-all animate-fade-in`}>
+        {/* Superior high-contrast vector brand icon: Crisp Shield + Inner Digit (₹) represent security and finance perfectly */}
+        <div className={`${iconSizeClass} bg-gradient-to-tr from-[#FF7A00] to-[#E65C00] shadow-[0_4px_22px_rgba(255,122,0,0.3)] flex items-center justify-center relative overflow-hidden shrink-0 group rounded-2xl`}>
+          <div className="absolute inset-x-0 bottom-0 top-1/2 bg-slate-950/20"></div>
           <Shield className={`${iconClass} text-white stroke-[2.5]`} />
-          <span className="absolute text-white font-extrabold font-mono text-[11px] sm:text-sm mt-0.5" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>₹</span>
+          <span 
+            className="absolute text-white font-extrabold font-mono text-center leading-none select-none mt-0.5" 
+            style={{ 
+              fontSize: isSm ? "12px" : isLg ? "28px" : "18px", 
+              textShadow: "0 2px 4px rgba(0,0,0,0.4)" 
+            }}
+          >
+            ₹
+          </span>
         </div>
-        <div className="text-left select-none leading-none">
-          <div className="flex items-center space-x-1.5">
+        
+        <div className={`${layout === "vertical" ? "text-center" : "text-left"} select-none leading-none`}>
+          <div className={`flex items-center space-x-1.5 ${layout === "vertical" ? "justify-center" : ""}`}>
             <span className={`${titleClass} text-white leading-tight font-sans font-black`}>{platformName}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#FF7A00] animate-pulse"></span>
           </div>
-          <p className={`${subClass} text-[#FF7A00]/90 uppercase font-mono font-black tracking-widest mt-1`}>
+          <p className={`${subClass} text-[#FF7A00]/90 uppercase font-mono font-black tracking-widest mt-1.5`}>
             FAST • SECURE • DIGITAL
           </p>
         </div>
@@ -1841,39 +1859,43 @@ export default function App() {
             {stage === "LOGIN" && (
               <motion.div 
                 key="login"
-                initial={{ opacity: 0, scale: 0.96 }}
+                initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
                 className="flex-1 p-6 flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-center space-x-2 pt-2 pb-4">
-                    <button onClick={() => setStage("ONBOARDING")} className="p-1 rounded-full text-slate-400 hover:text-white">
+                    <button onClick={() => setStage("ONBOARDING")} className="p-1.5 rounded-full text-zinc-400 hover:text-white transition-colors hover:bg-zinc-900">
                       <ArrowLeft className="w-5 h-5" />
                     </button>
                   </div>
 
-                  <div className="mb-6 flex justify-start">
+                  <div className="mb-6 flex justify-start select-none">
                     {renderAppLogo("md", "horizontal")}
                   </div>
 
                   <h2 className="text-3xl font-black tracking-tight text-white leading-tight font-sans mt-2">Welcome Back</h2>
-                  <p className="text-xs text-[#6B7280] mt-1.5 leading-relaxed">
-                    Fast. Secure. Digital. Please input your secure mobile code to retrieve or register your loan files.
+                  <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+                    Please verify your mobile number to access your DigiLend account safely.
                   </p>
 
-                  <div className="mt-8 bg-[#081B4B]/30 border border-[#081B4B] p-5 rounded-3xl space-y-4">
-                    <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Mobile Phone Login</label>
+                  <div className="mt-8 space-y-2.5">
+                    <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Mobile Number</label>
                     
-                    <div className="flex items-center space-x-3 bg-slate-950/40 p-3 rounded-2xl border border-slate-800">
-                      <span className="text-sm font-bold text-slate-300 border-r border-[#6B7280]/20 pr-3 font-mono">🇮🇳 +91</span>
+                    <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
+                      <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
+                        <span>🇮🇳</span>
+                        <span>+91</span>
+                      </span>
                       <input 
                         type="text"
                         maxLength={10}
-                        placeholder="Enter 10-Digit Mobile"
+                        placeholder="Enter 10-Digit Phone"
                         value={phoneNumber}
                         onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                        className="flex-1 bg-transparent border-0 text-base font-mono tracking-widest text-white focus:outline-hidden focus:ring-0"
+                        className="flex-1 bg-transparent border-none p-0 text-base font-semibold tracking-widest text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700"
+                        autoFocus
                       />
                     </div>
                   </div>
@@ -1882,16 +1904,26 @@ export default function App() {
                 <div className="pb-6">
                   <button 
                     onClick={startOTPVerifyFlow}
-                    disabled={phoneNumber.length < 10}
-                    className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all ${
-                      phoneNumber.length === 10
-                        ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-lg"
-                        : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                    disabled={phoneNumber.length < 10 || isSendingOtp}
+                    className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all flex items-center justify-center space-x-2.5 ${
+                      phoneNumber.length === 10 && !isSendingOtp
+                        ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110 active:scale-[0.99]"
+                        : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
                     }`}
                   >
-                    Continue
+                    {isSendingOtp ? (
+                      <>
+                        <RefreshCcw className="w-5 h-5 animate-spin text-white" />
+                        <span>Sending One-Time Password...</span>
+                      </>
+                    ) : (
+                      <span>Continue</span>
+                    )}
                   </button>
-                  <p className="text-[10px] text-zinc-500 text-center mt-3 font-mono">By proceeding, you authorize {platformName} to match CIBIL information.</p>
+
+                  <p className="text-[9.5px] text-zinc-600 text-center mt-3.5 font-mono">
+                    By proceeding, you authorize {platformName} to match CIBIL information.
+                  </p>
                 </div>
               </motion.div>
             )}
@@ -1900,26 +1932,26 @@ export default function App() {
             {stage === "OTP" && (
               <motion.div 
                 key="otp"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0 }}
                 className="flex-1 p-6 flex flex-col justify-between"
               >
                 <div>
-                  <div className="flex items-center space-x-2 pt-2 pb-6">
-                    <button onClick={() => setStage("LOGIN")} className="p-1 rounded-full text-slate-400 hover:text-white">
+                  <div className="flex items-center space-x-2 pt-2 pb-4">
+                    <button onClick={() => setStage("LOGIN")} className="p-1.5 rounded-full text-zinc-400 hover:text-white transition-colors hover:bg-zinc-900">
                       <ArrowLeft className="w-5 h-5" />
                     </button>
-                    <span className="text-xs font-bold font-mono text-slate-400">Security PIN</span>
+                    <span className="text-xs font-bold font-mono text-zinc-500 uppercase tracking-widest">Security OTP</span>
                   </div>
 
-                  <h2 className="text-2xl font-black tracking-tight text-white leading-tight">Verification</h2>
-                  <p className="text-xs text-[#6B7280] mt-1">
-                    Sent a 6-Digit authorization code to <span className="text-[#FF7A00] font-mono">+91 {phoneNumber}</span>.
+                  <h2 className="text-3xl font-black tracking-tight text-white leading-tight mt-2">Enter Code</h2>
+                  <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+                    We sent a 6-digit confirmation pin to <span className="text-[#FF7A00] font-mono font-bold">+91 {phoneNumber}</span>.
                   </p>
 
-                  <div className="mt-8 bg-[#081B4B]/30 border border-[#081B4B] p-5 rounded-3xl space-y-4">
-                    <div className="flex justify-between space-x-1.5 max-w-[280px] mx-auto">
+                  <div className="mt-8 space-y-4">
+                    <div className="flex justify-between space-x-2 max-w-[280px] mx-auto">
                       {[0, 1, 2, 3, 4, 5].map((idx) => (
                         <input 
                           key={idx}
@@ -1937,7 +1969,7 @@ export default function App() {
                               document.getElementById(`otp-box-${idx + 1}`)?.focus();
                             }
                           }}
-                          className="w-9 h-11 text-center text-lg font-black bg-slate-950 border border-slate-800 rounded-xl focus:border-[#FF7A00] focus:outline-hidden text-white"
+                          className="w-10 h-12 text-center text-lg font-black bg-zinc-950 border border-zinc-800 rounded-xl focus:border-[#FF7A00] focus:outline-hidden text-white transition-colors"
                         />
                       ))}
                     </div>
@@ -1945,22 +1977,27 @@ export default function App() {
                     <div className="pt-2 text-center">
                       <button 
                         onClick={() => setOtpCode(["9", "9", "8", "8", "0", "0"])} 
-                        className="text-[10px] font-mono text-zinc-400 bg-slate-950 border border-slate-800 py-1.5 px-3 rounded-md hover:text-[#FF7A00]"
+                        className="text-[10px] font-bold font-mono text-zinc-500 hover:text-[#FF7A00] bg-zinc-950/60 border border-zinc-800 py-2 px-4 rounded-xl transition-all hover:bg-zinc-950 active:scale-95"
                       >
                         Auto Fill PIN (998800)
                       </button>
                     </div>
 
                     {otpError && (
-                      <div className="p-2 rounded-lg bg-red-950/10 border border-red-900/10 text-red-400 text-[10px] font-mono leading-relaxed">
+                      <div className="p-3.5 rounded-xl bg-red-950/10 border border-red-900/10 text-red-400 text-[10px] font-mono leading-relaxed text-center">
                         ⚠️ Firebase Error: {otpError}
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center text-xs font-mono pt-2 text-[#6B7280]">
+                    <div className="flex justify-between items-center text-xs font-mono pt-3 border-t border-zinc-900/60 text-zinc-500">
                       <span>{otpTimer > 0 ? `Resend code in ${otpTimer}s` : "No code received?"}</span>
                       {otpTimer === 0 ? (
-                        <button onClick={() => { setOtpTimer(60); setOtpCode(["", "", "", "", "", ""]); sendFirebaseOTP(phoneNumber); }} className="text-[#FF7A00] font-bold underline">Resend OTP</button>
+                        <button 
+                          onClick={() => { setOtpTimer(60); setOtpCode(["", "", "", "", "", ""]); sendFirebaseOTP(phoneNumber); }} 
+                          className="text-[#FF7A00] font-bold underline cursor-pointer hover:text-orange-400"
+                        >
+                          Resend OTP
+                        </button>
                       ) : null}
                     </div>
                   </div>
@@ -1972,8 +2009,8 @@ export default function App() {
                     disabled={otpCode.some((c) => c === "")}
                     className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all ${
                       !otpCode.some((c) => c === "")
-                        ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-lg"
-                        : "bg-slate-800 text-slate-500 cursor-not-allowed"
+                        ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110"
+                        : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
                     }`}
                   >
                     Verify & Continue
