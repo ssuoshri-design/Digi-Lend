@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   Shield, Bell, HelpCircle, User, CreditCard, ChevronRight, 
-  ArrowLeft, CheckCircle2, IndianRupee, Clock, FileText, Send, Lock,
+  ArrowLeft, ArrowRight, CheckCircle2, IndianRupee, Clock, FileText, Send, Lock,
   RefreshCw, Award, Camera, Check, Building, FileCheck, ArrowUpRight, Zap, Globe,
   Sparkles, History, Wallet, LogOut, MessageSquare, Key, Phone, Settings, AlertCircle, RefreshCcw, Upload
 } from "lucide-react";
@@ -41,6 +41,7 @@ export default function App() {
   const [googleVerificationPromptNeeded, setGoogleVerificationPromptNeeded] = useState<boolean>(false);
   const [manualGoogleEmail, setManualGoogleEmail] = useState<string>("james.fernandes@gmail.com");
   const [manualGoogleName, setManualGoogleName] = useState<string>("James Fernandes");
+  const [loginMethodMode, setLoginMethodMode] = useState<"GOOGLE" | "PHONE">("GOOGLE");
   const [activeTab, setActiveTab] = useState<"home" | "loans" | "activity" | "support" | "profile">("home");
 
   // Bottom sheets & Interactive Overlay Panels
@@ -2738,53 +2739,102 @@ export default function App() {
                     )}
 
                     <div className="mt-6 space-y-4">
-                      {/* Standard Google Button if not authenticated yet */}
-                      {!googleEmail && !googleVerificationPromptNeeded && (
-                        <div className="space-y-3 mb-6">
-                          <button
-                            onClick={() => handleGoogleSocialSignIn()}
-                            type="button"
-                            className="w-full py-4 rounded-2xl border border-zinc-850 bg-zinc-950/50 hover:bg-zinc-900 text-zinc-300 font-bold text-sm transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.99] cursor-pointer hover:border-[#FF7A00]/40 shadow-sm"
-                          >
-                            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" width="24" height="24">
-                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.22-.66-.35-1.36-.35-2.09z" />
-                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-                            </svg>
-                            <span>Continue with Google / Gmail</span>
-                          </button>
-
-                          <div className="relative flex items-center justify-center my-4">
-                            <div className="absolute inset-0 flex items-center">
-                              <div className="w-full border-t border-zinc-900"></div>
+                      {googleEmail ? (
+                        /* Google authenticated mode - collect phone number for security alignment */
+                        <div className="space-y-4 font-sans text-left">
+                          <div className="space-y-2.5 animate-fadeIn">
+                            <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono text-left block">Mobile Number</label>
+                          
+                            <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
+                              <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
+                                <span>🇮🇳</span>
+                                <span>+91</span>
+                              </span>
+                              <input 
+                                type="tel"
+                                inputMode="numeric"
+                                pattern="[0-9]*"
+                                maxLength={10}
+                                placeholder="Enter 10-Digit Phone"
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
+                                className="flex-1 bg-transparent border-none p-0 text-base font-semibold tracking-widest text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700 font-sans"
+                                autoFocus
+                              />
                             </div>
-                            <span className="relative px-3 bg-[#020818] text-[9.5px] text-zinc-500 font-mono uppercase tracking-widest font-bold">Or use mobile OTP</span>
                           </div>
                         </div>
-                      )}
+                      ) : (
+                        /* Toggle between Google login and Mobile login options to save space */
+                        <>
+                          {loginMethodMode === "GOOGLE" && (
+                            <div className="space-y-4 animate-fadeIn">
+                              {!googleVerificationPromptNeeded && (
+                                <div className="space-y-4 mb-2">
+                                  <button
+                                    onClick={() => handleGoogleSocialSignIn()}
+                                    type="button"
+                                    className="w-full py-4 rounded-2xl border border-zinc-850 bg-zinc-950/50 hover:bg-zinc-900 text-zinc-300 font-bold text-sm transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.99] cursor-pointer hover:border-[#FF7A00]/40 shadow-sm"
+                                  >
+                                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" width="24" height="24">
+                                      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.22-.66-.35-1.36-.35-2.09z" />
+                                      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                                    </svg>
+                                    <span>Continue with Google / Gmail</span>
+                                  </button>
 
-                      <div className="space-y-2.5">
-                        <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono text-left block">Mobile Number</label>
-                      
-                        <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
-                          <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
-                            <span>🇮🇳</span>
-                            <span>+91</span>
-                          </span>
-                          <input 
-                            type="tel"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            maxLength={10}
-                            placeholder="Enter 10-Digit Phone"
-                            value={phoneNumber}
-                            onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
-                            className="flex-1 bg-transparent border-none p-0 text-base font-semibold tracking-widest text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700"
-                            autoFocus
-                          />
-                        </div>
-                      </div>
+                                  <div className="relative flex items-center justify-center pt-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setLoginMethodMode("PHONE")}
+                                      className="w-full py-4 rounded-2xl border border-zinc-900 bg-zinc-950/25 hover:bg-zinc-900 text-zinc-400 hover:text-[#FF7A00] font-mono text-[11px] uppercase tracking-widest font-bold transition-all duration-250 flex items-center justify-center gap-2 active:scale-[0.99] cursor-pointer"
+                                    >
+                                      <span>Or use mobile OTP</span>
+                                      <ArrowRight className="w-3.5 h-3.5 text-[#FF7A00]" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {loginMethodMode === "PHONE" && (
+                            <div className="space-y-4 animate-fadeIn">
+                              <div className="space-y-2.5">
+                                <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono text-left block">Mobile Number</label>
+                              
+                                <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
+                                  <span className="text-sm font-bold text-zinc-300 border-r border-zinc-800 pr-3.5 font-mono flex items-center gap-2 select-none">
+                                    <span>🇮🇳</span>
+                                    <span>+91</span>
+                                  </span>
+                                  <input 
+                                    type="tel"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    maxLength={10}
+                                    placeholder="Enter 10-Digit Phone"
+                                    value={phoneNumber}
+                                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ""))}
+                                    className="flex-1 bg-transparent border-none p-0 text-base font-semibold tracking-widest text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700"
+                                    autoFocus
+                                  />
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => setLoginMethodMode("GOOGLE")}
+                                className="w-full py-3 text-zinc-500 hover:text-white transition-colors text-[11.5px] font-bold tracking-wide flex items-center justify-center gap-1.5 focus:outline-hidden cursor-pointer font-mono uppercase"
+                              >
+                                <span>← Back to Google Sign-In</span>
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     
                     {/* Elegant Inline Error Callout & Firebase Configuration Guidance */}
                     {otpError && (
@@ -2851,29 +2901,31 @@ export default function App() {
                 </div>
 
                   <div className="pb-6">
-                    <button 
-                      onClick={startOTPVerifyFlow}
-                      disabled={phoneNumber.length < 10 || isSendingOtp || cooldownRemaining > 0}
-                      className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all flex items-center justify-center space-x-2.5 ${
-                        phoneNumber.length === 10 && !isSendingOtp && cooldownRemaining === 0
-                          ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110 active:scale-[0.99]"
-                          : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
-                      }`}
-                    >
-                      {isSendingOtp ? (
-                        <>
-                          <RefreshCcw className="w-5 h-5 animate-spin text-white" />
-                          <span>Sending One-Time Password...</span>
-                        </>
-                      ) : cooldownRemaining > 0 ? (
-                        <>
-                          <Clock className="w-5 h-5 text-amber-500 animate-pulse" />
-                          <span>Please wait {cooldownRemaining}s...</span>
-                        </>
-                      ) : (
-                        <span>Continue</span>
-                      )}
-                    </button>
+                    {(googleEmail || loginMethodMode === "PHONE") && (
+                      <button 
+                        onClick={startOTPVerifyFlow}
+                        disabled={phoneNumber.length < 10 || isSendingOtp || cooldownRemaining > 0}
+                        className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all flex items-center justify-center space-x-2.5 ${
+                          phoneNumber.length === 10 && !isSendingOtp && cooldownRemaining === 0
+                            ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110 active:scale-[0.99]"
+                            : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
+                        }`}
+                      >
+                        {isSendingOtp ? (
+                          <>
+                            <RefreshCcw className="w-5 h-5 animate-spin text-white" />
+                            <span>Sending One-Time Password...</span>
+                          </>
+                        ) : cooldownRemaining > 0 ? (
+                          <>
+                            <Clock className="w-5 h-5 text-amber-500 animate-pulse" />
+                            <span>Please wait {cooldownRemaining}s...</span>
+                          </>
+                        ) : (
+                          <span>Continue</span>
+                        )}
+                      </button>
+                    )}
 
                     <p className="text-[9.5px] text-zinc-500 text-center mt-3.5 font-mono font-bold max-w-xs mx-auto leading-relaxed">
                       By proceeding, you authorize {platformName} (a secure brand of <strong>Digi Infotech Solutions Private Limited</strong>) to match CIBIL information.
