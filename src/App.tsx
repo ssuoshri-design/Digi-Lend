@@ -653,10 +653,15 @@ export default function App() {
       }
 
       if (!serverCheckResponse.ok) {
-        throw {
-          code: "SERVER_VALIDATION_ERROR",
-          message: serverCheckResult?.error || "Server pre-flight rate check failed."
-        };
+        if (serverCheckResponse.status === 404 || serverCheckResponse.status >= 500) {
+          console.warn(`[DigiLend SMS Audit] Server rate check endpoint returned status ${serverCheckResponse.status}. Bypassing to allow client-side evaluation on static platforms.`);
+          serverCheckResult = { allowed: true };
+        } else {
+          throw {
+            code: "SERVER_VALIDATION_ERROR",
+            message: serverCheckResult?.error || "Server pre-flight rate check failed."
+          };
+        }
       }
 
       if (serverCheckResult && !serverCheckResult.allowed) {
@@ -864,15 +869,21 @@ export default function App() {
         body: JSON.stringify({ phone: cleanNum, deviceId })
       });
 
+      let serverCheckResult: any = { allowed: true };
       if (!serverCheckResponse.ok) {
-        const errorData = await serverCheckResponse.json();
-        throw {
-          code: "SERVER_VALIDATION_ERROR",
-          message: errorData.error || "Server pre-flight rate check failed."
-        };
+        if (serverCheckResponse.status === 404 || serverCheckResponse.status >= 500) {
+          console.warn(`[Admin Test OTP] Server rate check endpoint returned status ${serverCheckResponse.status}. Bypassing to allow client-side evaluation on static platforms.`);
+        } else {
+          const errorData = await serverCheckResponse.json();
+          throw {
+            code: "SERVER_VALIDATION_ERROR",
+            message: errorData.error || "Server pre-flight rate check failed."
+          };
+        }
+      } else {
+        serverCheckResult = await serverCheckResponse.json();
       }
 
-      const serverCheckResult = await serverCheckResponse.json();
       if (!serverCheckResult.allowed) {
         throw {
           code: serverCheckResult.errorCode || "auth/too-many-requests",
