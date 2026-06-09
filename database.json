@@ -1,0 +1,280 @@
+{
+  "settings": {
+    "interestRate": 2.5,
+    "processingFeePercent": 3,
+    "gstPercent": 18,
+    "platformName": "DigiLend",
+    "swiggyCashbackPercent": 25,
+    "zeroCostTenureMonths": [
+      3,
+      6,
+      9
+    ],
+    "logoUrl": ""
+  },
+  "configs": {
+    "firebase": {
+      "projectId": "driver-first-4a302",
+      "apiKey": "AIzaSyBfGQZ3qVCjPhcTUcOpa0feTbTFxBVgMgI",
+      "appId": "1:590031557700:web:87738a6cfb10e1f092d811",
+      "senderId": "590031557700"
+    },
+    "decentro": {
+      "clientId": "",
+      "clientSecret": "",
+      "environment": "sandbox"
+    },
+    "razorpay": {
+      "keyId": "",
+      "keySecret": ""
+    },
+    "razorpayx": {
+      "accountNumber": "",
+      "apiKey": "",
+      "apiSecret": ""
+    }
+  },
+  "users": [
+    {
+      "id": "usr-01",
+      "fullName": "Aniket Sharma",
+      "phone": "+91 98765 43210",
+      "dob": "1994-04-12",
+      "gender": "Male",
+      "email": "aniket.sharma@gmail.com",
+      "occupation": "Software Engineer",
+      "employmentType": "Salaried",
+      "monthlyIncome": 85000,
+      "creditScore": 780,
+      "maxEligibleAmount": 20000,
+      "createdAt": "2026-06-01T08:00:00Z",
+      "kyc": {
+        "panNumber": "ABCDE1234F",
+        "digilockerVerified": true,
+        "aadhaarAddress": "Flat 402, Royal Residency, Indiranagar, Bengaluru, 560038",
+        "selfieUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200",
+        "status": "VERIFIED",
+        "verifiedAt": "2026-06-01T08:30:00Z"
+      },
+      "bank": {
+        "accountNumber": "50100412345678",
+        "ifscCode": "HDFC0000104",
+        "bankName": "HDFC Bank",
+        "isVerified": true
+      },
+      "riskEvaluation": {
+        "score": 88,
+        "grade": "A++",
+        "repaymentProbability": 98,
+        "generatedAt": "2026-06-01T08:25:00Z"
+      }
+    },
+    {
+      "id": "usr-02",
+      "fullName": "Priya Patel",
+      "phone": "+91 87654 32109",
+      "dob": "1995-11-23",
+      "gender": "Female",
+      "email": "priya.patel@outlook.com",
+      "occupation": "UX Designer",
+      "employmentType": "Salaried",
+      "monthlyIncome": 62000,
+      "creditScore": 710,
+      "maxEligibleAmount": 15000,
+      "createdAt": "2026-06-02T10:15:00Z",
+      "kyc": {
+        "panNumber": "XYZWP5678A",
+        "digilockerVerified": true,
+        "aadhaarAddress": "7A, Green Valley Meadows, Gachibowli, Hyderabad, 500032",
+        "selfieUrl": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200",
+        "status": "VERIFIED",
+        "verifiedAt": "2026-06-02T10:45:00Z"
+      },
+      "bank": {
+        "accountNumber": "204123456789",
+        "ifscCode": "SBIN0001234",
+        "bankName": "State Bank of India",
+        "isVerified": true
+      },
+      "riskEvaluation": {
+        "score": 75,
+        "grade": "B+",
+        "repaymentProbability": 90,
+        "generatedAt": "2026-06-02T10:30:00Z"
+      }
+    },
+    {
+      "id": "usr-03",
+      "fullName": "Rahul Varma",
+      "phone": "+91 76543 21098",
+      "dob": "1991-08-05",
+      "gender": "Male",
+      "email": "rahul.varma@gmail.com",
+      "occupation": "Freelance Consultant",
+      "employmentType": "Self-Employed",
+      "monthlyIncome": 45000,
+      "creditScore": 610,
+      "maxEligibleAmount": 8000,
+      "createdAt": "2026-06-05T14:20:00Z",
+      "kyc": {
+        "panNumber": "PQRJK9101B",
+        "digilockerVerified": false,
+        "aadhaarAddress": "Sector 15, Part-2, Gurugram, Haryana, 122001",
+        "status": "PENDING"
+      },
+      "bank": {
+        "accountNumber": "9123456780",
+        "ifscCode": "ICIC0000001",
+        "bankName": "ICICI Bank",
+        "isVerified": false
+      }
+    }
+  ],
+  "loans": [
+    {
+      "id": "lon-101",
+      "userId": "usr-01",
+      "amount": 15000,
+      "interestRate": 2.5,
+      "processingFee": 450,
+      "gst": 81,
+      "tenureDays": 30,
+      "netDisbursal": 14469,
+      "repaymentAmount": 15375,
+      "outstandingBalance": 0,
+      "status": "REPAID",
+      "dueDate": "2026-07-01",
+      "createdAt": "2026-06-01T09:00:00Z",
+      "timeline": [
+        {
+          "status": "APPLIED",
+          "timestamp": "2026-06-01T09:00:00Z",
+          "label": "Applied Online"
+        },
+        {
+          "status": "APPROVED",
+          "timestamp": "2026-06-01T09:05:00Z",
+          "label": "Instant Approval"
+        },
+        {
+          "status": "DISBURSED",
+          "timestamp": "2026-06-01T09:12:00Z",
+          "label": "Disbursed to Bank"
+        },
+        {
+          "status": "REPAID",
+          "timestamp": "2026-06-05T18:30:00Z",
+          "label": "Fully Repaid"
+        }
+      ]
+    },
+    {
+      "id": "lon-102",
+      "userId": "usr-02",
+      "amount": 10000,
+      "interestRate": 3,
+      "processingFee": 300,
+      "gst": 54,
+      "tenureDays": 30,
+      "netDisbursal": 9646,
+      "repaymentAmount": 10300,
+      "outstandingBalance": 10300,
+      "status": "DISBURSED",
+      "dueDate": "2026-07-02",
+      "createdAt": "2026-06-02T11:00:00Z",
+      "timeline": [
+        {
+          "status": "APPLIED",
+          "timestamp": "2026-06-02T11:00:00Z",
+          "label": "Applied Online"
+        },
+        {
+          "status": "APPROVED",
+          "timestamp": "2026-06-02T11:05:00Z",
+          "label": "Approved automatically"
+        },
+        {
+          "status": "DISBURSED",
+          "timestamp": "2026-06-02T11:20:00Z",
+          "label": "Disbursed to HDFC"
+        }
+      ]
+    }
+  ],
+  "repayments": [
+    {
+      "id": "rep-201",
+      "loanId": "lon-101",
+      "amountPaid": 15375,
+      "method": "UPI AutoPay",
+      "transactionId": "TXN5812948194",
+      "paidAt": "2026-06-05T18:30:00Z"
+    }
+  ],
+  "notifications": [
+    {
+      "id": "not-01",
+      "userId": "usr-01",
+      "title": "Loan Disbursed Fully 🎉",
+      "message": "₹14,469 has been credited into your HDFC Bank Account. Transaction reference id TXN-734199.",
+      "type": "SUCCESS",
+      "isRead": false,
+      "createdAt": "2026-06-01T09:12:00Z"
+    },
+    {
+      "id": "not-02",
+      "userId": "usr-02",
+      "title": "Active Credit Limit Increased",
+      "message": "Congratulations Priya! Your maximum limit has been bumped to ₹15,000 based on reliable UPI credits.",
+      "type": "INFO",
+      "isRead": false,
+      "createdAt": "2026-06-02T15:00:00Z"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "tkt-01",
+      "userId": "usr-01",
+      "name": "Aniket Sharma",
+      "subject": "EMI Auto-Debit Billing Cycle Query",
+      "status": "OPEN",
+      "messages": [
+        {
+          "sender": "USER",
+          "text": "Hi, can I extend the active loan tenure or change my default bank auto-debit date from 1st to 5th?",
+          "createdAt": "2026-06-05T09:00:00Z"
+        },
+        {
+          "sender": "AI_ASSISTANT",
+          "text": "Hello Aniket! Thanks for asking. Currently, under regulatory framework guidelines, active loan tenures cannot be changed post disbursement. However, for future loans, you can choose flexible repayment cycles ranging up to 90 days. Would you like me to guide on how to update credit options?",
+          "createdAt": "2026-06-05T09:02:00Z"
+        }
+      ],
+      "createdAt": "2026-06-05T09:00:00Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "id": "aud-01",
+      "timestamp": "2026-06-07T07:11:00Z",
+      "category": "SERVICE",
+      "level": "INFO",
+      "message": "C-KYC Matcher linked 14 records successfully for +91 98765 43210"
+    },
+    {
+      "id": "aud-02",
+      "timestamp": "2026-06-07T07:12:00Z",
+      "category": "RISK",
+      "level": "INFO",
+      "message": "AI SMS Risk score computed: 98% Repayment probability for Priya Patel."
+    },
+    {
+      "id": "aud-03",
+      "timestamp": "2026-06-07T07:14:00Z",
+      "category": "DISBURSEMENT",
+      "level": "INFO",
+      "message": "Penny drop test initiated on banking routing ID HDFC0000104. Fully settled in 120ms."
+    }
+  ],
+  "otpLogs": []
+}
