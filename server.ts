@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -1148,15 +1149,185 @@ app.post("/api/db/reset", (req, res) => {
   res.json({ status: "ok", database });
 });
 
-// Social and Phone two-step email OTP endpoint
-app.post("/api/auth/send-email-code", (req, res) => {
+// Social and Phone two-step email OTP endpoint with REAL SMTP verification
+app.post("/api/auth/send-email-code", async (req, res) => {
   const { email, code } = req.body;
   if (!email) return res.status(400).json({ error: "Email address is required." });
   
   console.log(`[DigiLend Email Gateway] Verification security code generated: ${code} for target inbox: ${email}`);
   addAuditLog("SECURITY", "INFO", `Verification security code generated: ${code} for target inbox: ${email}`);
-  
-  res.json({ success: true, message: `OTP code logged in server console.` });
+
+  // Fetch SMTP credentials from environment
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = parseInt(process.env.SMTP_PORT || "587", 10);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || `"DigiLend Verification" <${smtpUser || "no-reply@digilend.tech"}>`;
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    const errorMsg = "SMTP configurations are missing in the Settings/Environment. Please setup SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS under the AI Studio Settings Panel.";
+    console.warn(`[DigiLend SMTP] ${errorMsg}`);
+    addAuditLog("SECURITY", "WARNING", `Failed to dispatch real email verification (SMTP configured incorrectly)`);
+    return res.status(400).json({
+      success: false,
+      error: errorMsg,
+      errorCode: "SMTP_NOT_CONFIGURED"
+    });
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    // Elegant responsive HTML template for security verification
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Confirm Your Security Verification Code</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #020818;
+            color: #f4f4f5;
+            margin: 0;
+            padding: 0;
+            -webkit-font-smoothing: antialiased;
+          }
+          .email-container {
+            max-width: 500px;
+            margin: 40px auto;
+            background-color: #0b1329;
+            border: 1px solid #1e293b;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+          }
+          .email-header {
+            background-color: #020818;
+            padding: 30px;
+            text-align: center;
+            border-bottom: 1px solid #1e293b;
+          }
+          .brand-logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: #FF7A00;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+          }
+          .email-body {
+            padding: 40px 30px;
+            text-align: center;
+          }
+          .verification-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #ffffff;
+            margin-bottom: 10px;
+          }
+          .verification-subtitle {
+            font-size: 14px;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 30px;
+          }
+          .code-container {
+            background-color: #020818;
+            border: 1px dashed #FF7A00;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 25px auto;
+            max-width: 240px;
+          }
+          .verification-code {
+            font-size: 36px;
+            font-weight: 800;
+            letter-spacing: 12px;
+            color: #FF7A00;
+            text-align: center;
+            margin: 0;
+            padding-left: 12px;
+          }
+          .security-warning {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 30px;
+            line-height: 1.5;
+            border-top: 1px solid #1e293b;
+            padding-top: 20px;
+            text-align: left;
+          }
+          .email-footer {
+            background-color: #020818;
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #1e293b;
+            font-size: 11px;
+            color: #475569;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="email-container">
+          <div class="email-header">
+            <div class="brand-logo">DigiLend</div>
+          </div>
+          <div class="email-body">
+            <h1 class="verification-title">Two-Step Verification</h1>
+            <p class="verification-subtitle">Please enter the security verification code below to complete authorization and access your secure credit dashboard.</p>
+            
+            <div class="code-container">
+              <h2 class="verification-code">${code}</h2>
+            </div>
+            
+            <p style="font-size: 12px; color: #94a3b8; margin-top: 15px;">This verification code is valid for 10 minutes. Do not share this code with anyone representing DigiLend.</p>
+            
+            <div class="security-warning">
+              <strong>Security Protocol Warning:</strong> This message was automatically triggered for account verification safety protocols. If you did not make this request, please contact standard DigiLend compliance center support immediately to secure your files.
+            </div>
+          </div>
+          <div class="email-footer">
+            &copy; 2026 DigiLend. All Rights Reserved.<br>
+            A secure brand of Digi Infotech Solutions Private Limited.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await transporter.sendMail({
+      from: smtpFrom,
+      to: email,
+      subject: `[DigiLend] ${code} is your Security OTP Code`,
+      text: `Your DigiLend security verification OTP is: ${code}. This code is valid for 10 minutes.`,
+      html: htmlContent
+    });
+
+    console.log(`[DigiLend SMTP] Real-time SMTP email verification successfully dispatched to ${email}`);
+    addAuditLog("SECURITY", "INFO", `Email verification OTP successfully sent to ${email} via SMTP.`);
+    return res.json({ success: true, message: `Verification code successfully sent to ${email}` });
+
+  } catch (smtpErr: any) {
+    console.error("[DigiLend SMTP] Direct SMTP Server error:", smtpErr);
+    addAuditLog("SECURITY", "CRITICAL", `SMTP failure while dispatching to ${email}: ${smtpErr.message}`);
+    return res.status(500).json({
+      success: false,
+      error: `Failed to dispatch real email verification via SMTP server: ${smtpErr.message}`
+    });
+  }
 });
 
 // Update or register user

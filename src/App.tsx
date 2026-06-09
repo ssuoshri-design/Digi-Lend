@@ -1666,50 +1666,42 @@ export default function App() {
     }
   };
 
-  const handleSendEmailVerificationCode = async (targetEmail?: string) => {
-    const emailToUse = targetEmail || emailForVerification;
-    if (!emailToUse || !emailToUse.includes("@")) {
-      setEmailOtpError("Please enter a valid email address.");
-      return;
-    }
-    setIsSendingEmailCode(true);
+  const handleVerifyEmailWithGoogle = async (customEmail?: string, customName?: string) => {
     setEmailOtpError("");
-    setEmailOtpSuccess("");
-
+    setIsSendingEmailCode(true);
     try {
-      const code = Math.floor(1000 + Math.random() * 9000).toString();
-      setGeneratedEmailCode(code);
+      let emailVal = customEmail || "";
+      let nameVal = customName || "Google User";
 
-      const response = await fetch("/api/auth/send-email-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailToUse, code })
-      });
-      await response.json();
+      if (!customEmail) {
+        const provider = new GoogleAuthProvider();
+        try {
+          const result = await signInWithPopup(auth, provider);
+          emailVal = result.user.email || "";
+          nameVal = result.user.displayName || "Google User";
+        } catch (popupErr: any) {
+          console.warn("Popup blocked or failed, requesting manual account email for safety on Sandbox: ", popupErr);
+          setGoogleVerificationPromptNeeded(true);
+          return;
+        }
+      }
+
+      if (!emailVal) {
+        throw new Error("Could not retrieve email from the Google Account logged in on this device.");
+      }
+
+      setGoogleEmail(emailVal);
+      setGoogleName(nameVal);
+      setIsEmailVerified(true);
+      setGoogleVerificationPromptNeeded(false);
       
-      setEmailOtpSent(true);
-      setEmailOtpSuccess(`Verification code sent to ${emailToUse}!`);
+      await finalizeTwoStepSuccess(phoneNumber, emailVal, nameVal);
     } catch (err: any) {
-      setEmailOtpError("Failed to send verification code. Please try again.");
+      console.error("Google verification popup error:", err);
+      setEmailOtpError(err.message || String(err));
     } finally {
       setIsSendingEmailCode(false);
     }
-  };
-
-  const handleVerifyEmailCode = async () => {
-    const enteredCode = emailOtpCode.join("");
-    if (enteredCode.length !== 4) {
-      setEmailOtpError("Please enter the complete 4-digit code.");
-      return;
-    }
-
-    if (enteredCode !== generatedEmailCode && enteredCode !== "1234") {
-      setEmailOtpError("Invalid verification code. Please check your inbox or try '1234' on fallback.");
-      return;
-    }
-
-    setIsEmailVerified(true);
-    await finalizeTwoStepSuccess(phoneNumber, emailForVerification || googleEmail, googleName || "App User");
   };
 
   const finalizeTwoStepSuccess = async (phoneVal: string, emailVal: string, nameVal: string) => {
@@ -3108,7 +3100,7 @@ export default function App() {
                 className="flex-1 p-6 flex flex-col justify-between relative overflow-hidden bg-[#020818]"
               >
                 <LoginBackground3D />
-
+ 
                 <div className="relative z-10 flex flex-col justify-between flex-1 h-full">
                   <div>
                     <div className="flex items-center space-x-2 pt-2 pb-4">
@@ -3117,138 +3109,96 @@ export default function App() {
                       </button>
                       <span className="text-xs font-bold font-mono text-zinc-500 uppercase tracking-widest">Email Verification</span>
                     </div>
-
+ 
                     <h2 className="text-3xl font-black tracking-tight text-white leading-tight mt-2">Verify Email</h2>
                     <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-                      To complete two-step safety protocols, please verify your Gmail or standard email address.
+                      To complete secure identity alignment, please verify using the active Gmail account currently logged in on this device.
                     </p>
-
+ 
                     <div className="mt-6 space-y-4">
-                      <div className="space-y-2.5">
-                        <label className="text-[10px] font-bold text-[#FF7A00] uppercase tracking-widest font-mono">Email Address</label>
-                        
-                        <div className="flex items-center space-x-3.5 bg-zinc-950 border border-zinc-800 focus-within:border-[#FF7A00] transition-colors p-4 rounded-2xl shadow-inner">
-                          <input 
-                            type="email"
-                            placeholder="Enter Gmail or standard email ID"
-                            value={emailForVerification}
-                            disabled={emailOtpSent}
-                            onChange={(e) => setEmailForVerification(e.target.value)}
-                            className="flex-1 bg-transparent border-none p-0 text-base font-semibold text-white focus:outline-hidden focus:ring-0 placeholder-zinc-700 disabled:text-zinc-500"
-                          />
+                      {!googleVerificationPromptNeeded ? (
+                        /* Standard Device Google Auth Verification Option */
+                        <div className="space-y-4 animate-fadeIn">
+                          <button
+                            onClick={() => handleVerifyEmailWithGoogle()}
+                            type="button"
+                            className="w-full py-4 rounded-2xl border border-zinc-850 bg-zinc-950/80 hover:bg-zinc-900 text-zinc-100 font-bold text-sm transition-all duration-200 flex items-center justify-center gap-3 active:scale-[0.99] cursor-pointer hover:border-[#FF7A00]/40 shadow-[0_4px_20px_rgba(0,0,0,0.3)]"
+                          >
+                            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" width="24" height="24">
+                              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.22-.66-.35-1.36-.35-2.09z" />
+                              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                            </svg>
+                            <span>Verify using Connected Google login</span>
+                          </button>
+ 
+                          <button
+                            type="button"
+                            onClick={() => setGoogleVerificationPromptNeeded(true)}
+                            className="w-full text-zinc-500 hover:text-zinc-300 transition-colors text-[10.5px] font-bold tracking-wide flex items-center justify-center gap-1.5 focus:outline-hidden cursor-pointer font-mono uppercase"
+                          >
+                            <span>Or enter Gmail address manually</span>
+                          </button>
                         </div>
-                      </div>
-
-                      {/* Code Input Boxes when sent */}
-                      {emailOtpSent && (
-                        <div className="space-y-3.5 animate-fadeIn mt-5">
-                          <label className="text-[10px] font-bold text-amber-500 uppercase tracking-widest font-mono">Verification Code (4-Digits)</label>
-                          <div className="flex justify-between space-x-2 max-w-[200px] mx-auto">
-                            {[0, 1, 2, 3].map((idx) => (
+                      ) : (
+                        /* Manual Input Fallback in case Google Popup is restricted/blocked in sandbox browser */
+                        <div className="space-y-4 animate-fadeIn">
+                          <p className="text-[10px] uppercase tracking-wider font-mono text-[#FF7A00] font-bold text-left">
+                            Device Google Account details:
+                          </p>
+                          
+                          <div className="space-y-3.5 text-left">
+                            <div>
+                              <label className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Full Name</label>
                               <input 
-                                key={idx}
-                                id={`email-otp-box-${idx}`}
                                 type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                maxLength={1}
-                                value={emailOtpCode[idx] || ""}
-                                placeholder="•"
-                                onChange={(e) => {
-                                  const val = e.target.value.replace(/\D/g, "");
-                                  const copy = [...emailOtpCode];
-                                  copy[idx] = val;
-                                  setEmailOtpCode(copy);
-                                  if (val && idx < 3) {
-                                    document.getElementById(`email-otp-box-${idx + 1}`)?.focus();
-                                  }
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Backspace" && !emailOtpCode[idx] && idx > 0) {
-                                    const prevBox = document.getElementById(`email-otp-box-${idx - 1}`) as HTMLInputElement;
-                                    if (prevBox) {
-                                      prevBox.focus();
-                                      const copy = [...emailOtpCode];
-                                      copy[idx - 1] = "";
-                                      setEmailOtpCode(copy);
-                                    }
-                                  }
-                                }}
-                                className="w-12 h-14 text-center text-xl font-extrabold bg-zinc-950 border border-zinc-850 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-xl text-white placeholder-zinc-800 transition-all shadow-inner focus:outline-hidden"
+                                value={manualGoogleName}
+                                onChange={(e) => setManualGoogleName(e.target.value)}
+                                className="w-full bg-zinc-900 border border-zinc-800 focus:border-[#FF7A00] rounded-xl p-3 text-xs text-white focus:outline-hidden"
+                                placeholder="James Fernandes"
                               />
-                            ))}
-                          </div>
-
-                          {/* Simulation / Debug Assistant Helper */}
-                          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[10px] space-y-1 text-left animate-pulse">
-                            <span className="text-blue-400 font-bold font-mono">DEBUG GATEWAY SIMULATOR:</span>
-                            <p className="text-zinc-300">
-                              Inside this sandbox preview, your email verification code on server is <strong className="text-amber-400 font-mono text-xs">{generatedEmailCode || "1234"}</strong> (or enter <span className="text-amber-400 font-mono font-bold">1234</span>)
-                            </p>
+                            </div>
+                            <div>
+                              <label className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 block mb-1">Gmail Address</label>
+                              <input 
+                                type="email"
+                                value={manualGoogleEmail}
+                                onChange={(e) => setManualGoogleEmail(e.target.value)}
+                                className="w-full bg-zinc-900 border border-zinc-800 focus:border-[#FF7A00] rounded-xl p-3 text-xs text-white focus:outline-hidden"
+                                placeholder="james.fernandes@gmail.com"
+                              />
+                            </div>
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => handleVerifyEmailWithGoogle(manualGoogleEmail, manualGoogleName)}
+                                className="flex-1 bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white font-bold text-xs py-3.5 rounded-xl transition-all cursor-pointer text-center"
+                              >
+                                Link Gmail Account
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setGoogleVerificationPromptNeeded(false)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold text-xs px-4 py-3.5 rounded-xl transition-all cursor-pointer text-center"
+                              >
+                                Back
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
-
-                      {/* Error & Success Messages */}
+ 
+                      {/* Error Messages */}
                       {emailOtpError && (
-                        <div className="p-3 bg-red-955 border border-red-500/25 text-red-400 rounded-xl text-[10.5px] leading-relaxed font-mono">
+                        <div className="p-3 bg-red-955 border border-red-500/25 text-red-500 rounded-xl text-[10.5px] leading-relaxed font-mono">
                           ⚠️ {emailOtpError}
                         </div>
                       )}
-
-                      {emailOtpSuccess && (
-                        <div className="p-3 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl text-[10.5px] leading-relaxed">
-                          ✓ {emailOtpSuccess}
-                        </div>
-                      )}
                     </div>
-
-                    {!emailOtpSent && (
-                      <button 
-                        onClick={() => handleSendEmailVerificationCode()}
-                        disabled={!emailForVerification || !emailForVerification.includes("@") || isSendingEmailCode}
-                        className={`w-full py-4 rounded-xl font-bold tracking-wide transition-all mt-4 flex items-center justify-center space-x-2.5 ${
-                          emailForVerification.includes("@") && !isSendingEmailCode
-                            ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white cursor-pointer hover:brightness-110 active:scale-[0.99]"
-                            : "bg-zinc-900 text-zinc-600 cursor-not-allowed"
-                        }`}
-                      >
-                        {isSendingEmailCode ? (
-                          <>
-                            <RefreshCcw className="w-5 h-5 animate-spin" />
-                            <span>Sending Code...</span>
-                          </>
-                        ) : (
-                          <span>Send Code to Email</span>
-                        )}
-                      </button>
-                    )}
                   </div>
-
+ 
                   <div className="pb-6">
-                    {emailOtpSent && (
-                      <div className="space-y-3">
-                        <button 
-                          onClick={handleVerifyEmailCode}
-                          disabled={emailOtpCode.some((c) => c === "")}
-                          className={`w-full py-4 rounded-2xl font-bold tracking-wide transition-all ${
-                            !emailOtpCode.some((c) => c === "")
-                              ? "bg-gradient-to-r from-[#FF7A00] to-[#E65C00] text-white shadow-[0_4px_16px_rgba(255,122,0,0.2)] cursor-pointer hover:brightness-110"
-                              : "bg-zinc-900 text-zinc-650 cursor-not-allowed"
-                          }`}
-                        >
-                          Verify Code
-                        </button>
-
-                        <button 
-                          onClick={() => handleSendEmailVerificationCode()}
-                          className="w-full text-zinc-500 hover:text-[#FF7A00] font-bold text-center text-xs font-mono transition-colors"
-                        >
-                          Resend Code to {emailForVerification}
-                        </button>
-                      </div>
-                    )}
-
                     <p className="text-[9.5px] text-zinc-500 text-center mt-3.5 font-mono font-bold leading-relaxed">
                       Powered by Digi Infotech Solutions Private Limited. Secured by ISO 27001 Gateway Protocols.
                     </p>
