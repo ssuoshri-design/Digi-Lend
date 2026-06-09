@@ -1148,6 +1148,17 @@ app.post("/api/db/reset", (req, res) => {
   res.json({ status: "ok", database });
 });
 
+// Social and Phone two-step email OTP endpoint
+app.post("/api/auth/send-email-code", (req, res) => {
+  const { email, code } = req.body;
+  if (!email) return res.status(400).json({ error: "Email address is required." });
+  
+  console.log(`[DigiLend Email Gateway] Verification security code generated: ${code} for target inbox: ${email}`);
+  addAuditLog("SECURITY", "INFO", `Verification security code generated: ${code} for target inbox: ${email}`);
+  
+  res.json({ success: true, message: `OTP code logged in server console.` });
+});
+
 // Update or register user
 app.post("/api/users/save", (req, res) => {
   const { id, fullName, phone, dob, gender, email, occupation, employmentType, monthlyIncome } = req.body;
