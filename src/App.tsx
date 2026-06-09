@@ -1813,12 +1813,14 @@ export default function App() {
     setErrorMessage("None");
 
     try {
+      let fbUser: any = null;
+
       if (!confirmationResult) {
         throw new Error("No active Firebase validation session exists. Please request or resend a new OTP first.");
       }
       console.log(`Verifying real 6-digit Firebase OTP: ${fullOtp}`);
       const credential = await confirmationResult.confirm(fullOtp);
-      const fbUser = credential.user;
+      fbUser = credential.user;
       console.log("Firebase Phone Auth Authentication Success: ", fbUser);
       
       // Push secure admin audit log
@@ -3006,59 +3008,12 @@ export default function App() {
                     </div>
 
                     {otpError && (
-                      <div className="space-y-4">
-                        <div className="p-3.5 rounded-xl bg-red-950/20 border border-red-900/30 text-red-400 text-[10.5px] font-mono leading-relaxed text-center">
-                          ⚠️ Error: {otpError}
-                        </div>
-                        
-                        {/* Interactive Sandbox/Review Bypass Safety Valve */}
-                        <div className="p-4 rounded-xl border border-amber-900/30 bg-amber-950/10 space-y-2.5 text-center shadow-md">
-                          <span className="text-amber-500 text-[10px] uppercase font-mono font-black tracking-wider block">⚡ Development failover active</span>
-                          <p className="text-zinc-400 text-[10px] leading-relaxed">
-                            For easy review and sandbox evaluation, request a new resend OR tap below to use the secure sandbox bypass mechanism to proceed instantly.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              console.warn("SANDBOX BYPASS TRIGGERED: Local failover verification.");
-                              
-                              // Track bypass action in state
-                              setOtpRequestStatus("SENT");
-                              setFbResponseRaw(JSON.stringify({
-                                uid: "sandbox-dev-" + Date.now(),
-                                phoneNumber: `+91 ${phoneNumber}`,
-                                success: true,
-                                bypass: true,
-                                message: "Sandbox failover bypass triggered successfully."
-                              }, null, 2));
-                              setErrorCode("None");
-                              setErrorMessage("None");
-                              setDeliveryStatus("OTP_SUCCESS_VERIFIED");
-
-                              // Handle registration check or restoration
-                              const isNewUser = !fintechDb.users.some(
-                                (u) => u.phone.replace(/\D/g, "").includes(phoneNumber)
-                              );
-
-                              if (isNewUser) {
-                                setStage("PERMISSIONS");
-                              } else {
-                                const existing = fintechDb.users.find(
-                                  (u) => u.phone.replace(/\D/g, "").includes(phoneNumber)
-                                );
-                                if (existing) {
-                                  setCurrentUser(existing);
-                                }
-                                setStage("DASHBOARD");
-                              }
-                            }}
-                            className="w-full py-2 px-3.5 bg-[#FF7A00] hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
-                          >
-                            Bypass Verification & Proceed
-                          </button>
-                        </div>
+                      <div className="p-3.5 rounded-xl bg-red-950/20 border border-red-900/30 text-red-500 text-[10.5px] font-mono leading-relaxed text-center">
+                        ⚠️ Error: {otpError}
                       </div>
                     )}
+
+
 
                     <div className="flex justify-between items-center text-xs font-mono pt-3 border-t border-zinc-900/60 text-zinc-500">
                       <span>{otpTimer > 0 ? `Resend code in ${otpTimer}s` : "No code received?"}</span>
@@ -5998,6 +5953,22 @@ export default function App() {
                         {testResult.firebase.loading ? "⏳ Verifying handshake with Firebase Auth servers..." : testResult.firebase.message}
                       </div>
                     )}
+
+                    <div className="p-3 bg-zinc-900/40 border border-zinc-800 rounded-xl space-y-2 text-[10.5px]">
+                      <span className="text-amber-500 font-mono font-bold uppercase tracking-wider block text-[9.5px]">🇮🇳 TRAI DLT/Header SMS Registration Guidelines</span>
+                      <p className="text-zinc-400 leading-relaxed font-sans">
+                        To enable real cellular OTP delivery on all target user devices in India without domestic carrier blocks:
+                      </p>
+                      <ul className="text-zinc-500 font-sans list-disc list-inside space-y-1 pl-1">
+                        <li><strong className="text-zinc-300">Blaze Plan:</strong> Upgrade your Firebase Project from legacy free Spark to pay-as-you-go Blaze.</li>
+                        <li><strong className="text-zinc-300">Principal Entity (PE) ID:</strong> Secure your business registration number on standard Indian DLT portals (e.g., Jio, VIL, Smartping).</li>
+                        <li><strong className="text-zinc-300">DLT Sender ID (Header):</strong> Approve your custom 6-character alphabetic sender header (known as duality sender ID, e.g., <code className="bg-zinc-950 px-1 py-0.5 rounded text-amber-500">DGLNDS</code>).</li>
+                        <li><strong className="text-zinc-300">Content Template ID:</strong> Register the strict Firebase Auth code message template with your DLT carrier.</li>
+                      </ul>
+                      <p className="text-zinc-400 leading-relaxed font-sans mt-1">
+                        Map and bind these verified parameters directly on your Firebase Console under <code className="bg-zinc-900 px-1 rounded text-zinc-300 text-[10px]">Authentication &gt; Settings &gt; SMS Region Policy</code>.
+                      </p>
+                    </div>
 
                     <div className="flex space-x-2 pt-1">
                       <button 
