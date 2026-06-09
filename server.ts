@@ -13,6 +13,19 @@ const PORT = 3000;
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
+// Serve brand assets directly on the express server for both dev and production
+app.get("/assets/brand/digilend-logo.png", (req, res) => {
+  const logoPath = path.resolve(process.cwd(), "assets", "brand", "digilend-logo.png");
+  if (fs.existsSync(logoPath)) {
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=86400"); // 1 day cache
+    return res.sendFile(logoPath);
+  }
+  res.status(404).send("Logo not found");
+});
+
+app.use("/assets", express.static(path.join(process.cwd(), "assets")));
+
 // Initialize Gemini SDK if API Key is available
 const apiKey = process.env.GEMINI_API_KEY;
 let aiClient: GoogleGenAI | null = null;
