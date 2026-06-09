@@ -29,6 +29,7 @@ export interface UserProfile {
   createdAt: string;
   kyc: KYCInfo;
   bank: BankAccount;
+  kycProgress?: any;
   riskEvaluation?: {
     score: number;
     grade: string;
